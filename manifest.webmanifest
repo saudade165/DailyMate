@@ -1,0 +1,13 @@
+{
+  "name": "DailyMate",
+  "short_name": "DailyMate",
+  "description": "Your day, organized.",
+  "start_url": "./#/my-day",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#f4f7fb",
+  "icons": [
+    { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
