@@ -48,10 +48,14 @@ function reminderRow(r, now, { overdue = false } = {}) {
   const chips = [];
   if (overdue) chips.push(`<span class="chip chip--overdue">${icon('alert')}Overdue · ${esc(fromNow(at, now))}</span>`);
   else if (!r.done) chips.push(`<span class="chip">${icon('clock')}${esc(fromNow(at, now))}</span>`);
-  if (r.done) chips.push(`<span class="chip chip--done">${icon('check')}Done${r.doneAt ? ` ${esc(relativeDay(instantToLocal(Date.parse(r.doneAt)).date).toLowerCase())}` : ''}</span>`);
+  if (r.done) {
+    // "Done today" / "Done yesterday" / "Done Tue, Oct 13"
+    const when = r.doneAt ? relativeDay(instantToLocal(Date.parse(r.doneAt)).date) : '';
+    chips.push(`<span class="chip chip--done">${icon('check')}Done${when ? ` ${esc(/^(Today|Yesterday|Tomorrow)$/.test(when) ? when.toLowerCase() : when)}` : ''}</span>`);
+  }
   if (snoozed) chips.push(`<span class="chip chip--medium">${icon('clock')}Snoozed</span>`);
   if (r.repeat) chips.push(`<span class="chip">${icon('repeat')}${esc(describeRepeat(r.repeat, r.date))}</span>`);
-  if (task) chips.push(`<a class="chip chip--link" href="#/planner/day/${task.date}">${icon('check-circle')}Task: ${esc(task.title)}</a>`);
+  if (task) chips.push(`<a class="chip chip--link" href="#/planner/day/${task.date}" title="${esc(task.title)}">${icon('check-circle')}<span class="chip__text">Task: ${esc(task.title)}</span></a>`);
   if (otherZone) chips.push(`<span class="chip" title="Set for ${esc(formatTime(r.time))} in ${esc(r.tz)}">${icon('globe')}Set in ${esc(r.tz)}</span>`);
 
   return `

@@ -243,7 +243,7 @@ button { cursor: pointer; }
 /* ---------- Page header ---------- */
 
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
-.page-title { font-size: 34px; font-weight: 700; letter-spacing: -.02em; }
+.page-title { font-size: 34px; font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
 .page-subtitle { color: var(--text-muted); font-size: 18px; margin-top: 4px; }
 
 .hello { display: flex; align-items: center; gap: 20px; }
@@ -254,7 +254,7 @@ button { cursor: pointer; }
   color: var(--sun);
 }
 .hello__sun .icon { width: 42px; height: 42px; stroke-width: 2; }
-.hello__title { font-size: 34px; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; margin-top: 2px; }
+.hello__title { font-size: 34px; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; margin-top: 2px; overflow-wrap: anywhere; }
 .hello__date { color: var(--text-muted); font-size: 19px; margin-top: 2px; }
 
 /* ---------- Stats ---------- */
@@ -349,6 +349,8 @@ button { cursor: pointer; }
   background: var(--surface-2); color: var(--text-muted); border: 1px solid var(--border);
 }
 .chip .icon { width: 15px; height: 15px; stroke-width: 2.2; }
+.chip { max-width: 100%; }
+.chip__text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chip--high { background: var(--orange-soft); color: var(--orange); border-color: #fbd9bf; }
 .chip--medium { background: var(--amber-soft); color: var(--amber); border-color: #f5dfa6; }
 .chip--low { background: var(--primary-soft); color: var(--primary); border-color: var(--primary-soft-2); }
@@ -481,6 +483,7 @@ button { cursor: pointer; }
   animation: toast-in .2s ease-out;
 }
 .toast .icon { color: #7ee2a2; }
+.toast span { min-width: 0; overflow-wrap: anywhere; }
 .toast--error .icon { color: #ffb4a9; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } }
 
@@ -748,7 +751,7 @@ button { cursor: pointer; }
 .alert-card__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .alert-card__eyebrow { font-size: 14px; font-weight: 700; color: var(--amber); }
 .alert-card__title { font-size: 19px; font-weight: 700; overflow-wrap: anywhere; }
-.alert-card__task { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 15px; }
+.alert-card__task { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 15px; overflow-wrap: anywhere; }
 .alert-card__task .icon { width: 18px; height: 18px; }
 .alert-card__actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
 
@@ -801,7 +804,7 @@ button { cursor: pointer; }
 .proposal { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; padding: 12px; border: 1px solid var(--border); border-radius: 12px; }
 .proposal.is-added { background: var(--surface-2); }
 .proposal__body { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 6px; }
-.proposal__title { font-weight: 600; font-size: 17px; }
+.proposal__title { font-weight: 600; font-size: 17px; overflow-wrap: anywhere; }
 .proposal__actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 
 .composer { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; border-top: 1px solid var(--border); }
@@ -923,6 +926,8 @@ button { cursor: pointer; }
   .reminder__actions { order: 3; width: 100%; justify-content: flex-start; }
   .reminder__actions .btn { flex: 1; }
   .alert-region { right: 16px; left: 16px; bottom: 16px; width: auto; }
+  /* Keep short messages visible when a reminder card covers the bottom of the screen. */
+  body:has(.alert-card) .toast-region { bottom: auto; top: 16px; }
   .composer__row .btn { width: 100%; }
   .msg__bubble { max-width: 100%; }
 }

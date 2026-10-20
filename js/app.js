@@ -125,11 +125,18 @@ function setMenuOpen(open) {
 
 function onRouteChange() {
   ({ id: currentRoute, params: currentParams } = parseHash());
+  fixUnknownHash();
   setMenuOpen(false);
   renderNav();
   renderView();
   window.scrollTo(0, 0);
   main.focus({ preventScroll: true });
+}
+
+/** An unknown address (e.g. an old bookmark) shows My Day — make the address bar say so too. */
+function fixUnknownHash() {
+  const id = location.hash.replace(/^#\/?/, '').split('/')[0];
+  if (id && !findRoute(decodeURIComponent(id))) history.replaceState(null, '', `#/${DEFAULT_ROUTE}`);
 }
 
 /** Updates the address within the current section without a full page change (keeps scroll and focus). */
@@ -197,6 +204,7 @@ setInterval(() => {
 store.init();
 store.subscribe(renderAll);
 ({ id: currentRoute, params: currentParams } = parseHash());
+fixUnknownHash();
 renderNav();
 renderAll();
 alerts.start({ onTick: () => { if (currentRoute === 'reminders') renderView(); } });
