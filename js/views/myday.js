@@ -2,11 +2,9 @@
 
 import * as store from '../store.js';
 import { addDays, formatLong, formatShort, formatTime, greeting, isValidISO, relativeDay, todayISO } from '../dates.js';
-import { openTaskDialog, confirmAction } from '../dialogs.js';
+import { openTaskDialog } from '../dialogs.js';
+import { emptyState, handleTaskAction, handleTaskToggle, sortActive, sortByDate, sortDone, taskRow } from '../components.js';
 import { esc, icon, toast } from '../ui.js';
-
-const PRIORITY_RANK = { high: 0, medium: 1, low: 2, none: 3 };
-const PRIORITY_LABEL = { high: 'High priority', medium: 'Medium priority', low: 'Low priority' };
 const FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'todo', label: 'To do' },
@@ -34,21 +32,6 @@ export function onDayChanged(previousToday) {
 
 // ---- Selectors --------------------------------------------------------------
 
-function sortActive(a, b) {
-  if (a.time && b.time && a.time !== b.time) return a.time < b.time ? -1 : 1;
-  if (Boolean(a.time) !== Boolean(b.time)) return a.time ? -1 : 1;
-  if (a.priority !== b.priority) return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
-  return a.createdAt < b.createdAt ? -1 : 1;
-}
-
-function sortByDate(a, b) {
-  return a.date === b.date ? sortActive(a, b) : a.date < b.date ? -1 : 1;
-}
-
-function sortDone(a, b) {
-  return (a.completedAt ?? '') < (b.completedAt ?? '') ? -1 : 1;
-}
-
 function tasksFor(date) {
   return store.getTasks().filter((t) => t.date === date);
 }
@@ -65,47 +48,6 @@ function upcomingTasks(today) {
 }
 
 // ---- Templates ----------------------------------------------------------------
-
-function taskRow(task, { today, showDate = false, canMoveToToday = false }) {
-  const overdue = !task.completed && task.date < today;
-  const chips = [];
-  if (task.completed) chips.push(`<span class="chip chip--done">${icon('check')}Done</span>`);
-  if (overdue) chips.push(`<span class="chip chip--overdue">${icon('alert')}Overdue</span>`);
-  if (showDate) chips.push(`<span class="chip">${icon('calendar')}${esc(relativeDay(task.date, today))}</span>`);
-  if (task.time) chips.push(`<span class="chip">${icon('clock')}${esc(formatTime(task.time))}</span>`);
-  if (task.priority !== 'none') {
-    chips.push(`<span class="chip chip--${task.priority}">${icon('flag')}${PRIORITY_LABEL[task.priority]}</span>`);
-  }
-
-  return `
-    <li class="task ${task.completed ? 'is-done' : ''} ${overdue ? 'is-overdue' : ''}">
-      <label class="check">
-        <input type="checkbox" data-action="toggle" data-id="${esc(task.id)}" data-focus-key="toggle-${esc(task.id)}" ${task.completed ? 'checked' : ''}>
-        <span class="check__box" aria-hidden="true">${icon('check')}</span>
-        <span class="visually-hidden">${task.completed ? 'Completed' : 'Mark as done'}: ${esc(task.title)}</span>
-      </label>
-      <div class="task__body">
-        <p class="task__title">${esc(task.title)}</p>
-        ${chips.length ? `<div class="task__meta">${chips.join('')}</div>` : ''}
-        ${task.notes ? `<p class="task__notes">${esc(task.notes)}</p>` : ''}
-      </div>
-      <div class="task__actions">
-        ${canMoveToToday ? `<button class="btn btn--soft btn--sm" type="button" data-action="move-today" data-id="${esc(task.id)}" data-focus-key="move-${esc(task.id)}">Move to today</button>` : ''}
-        <button class="icon-btn" type="button" data-action="edit" data-id="${esc(task.id)}" data-focus-key="edit-${esc(task.id)}" aria-label="Edit: ${esc(task.title)}" title="Edit">${icon('edit')}</button>
-        <button class="icon-btn icon-btn--danger" type="button" data-action="delete" data-id="${esc(task.id)}" aria-label="Delete: ${esc(task.title)}" title="Delete">${icon('trash')}</button>
-      </div>
-    </li>`;
-}
-
-function emptyState({ iconName, heading, text, action = '' }) {
-  return `
-    <div class="empty">
-      <div class="empty__icon">${icon(iconName)}</div>
-      <h3 class="empty__title">${heading}</h3>
-      <p class="empty__text">${text}</p>
-      ${action}
-    </div>`;
-}
 
 const addButton = (label, cls = 'btn--primary') =>
   `<button class="btn ${cls}" type="button" data-action="add" data-focus-key="add-${cls}">${icon('plus')}${label}</button>`;
@@ -348,25 +290,11 @@ export async function onClick(e, { rerender, clearSearch }) {
     case 'add-tomorrow':
       openTaskDialog({ date: addDays(today, 1) });
       break;
-    case 'edit': {
-      const task = store.getTask(id);
-      if (task) openTaskDialog({ task });
+    case 'edit':
+    case 'delete':
+    case 'remind':
+      await handleTaskAction(action, id);
       break;
-    }
-    case 'delete': {
-      const task = store.getTask(id);
-      if (!task) return;
-      const ok = await confirmAction({
-        title: 'Delete this task?',
-        message: `“${task.title}” will be removed. This can’t be undone.`,
-      });
-      if (ok) {
-        store.deleteTask(id);
-        toast('Task deleted');
-        document.getElementById('main').focus();
-      }
-      break;
-    }
     case 'move-today':
       store.updateTask(id, { date: today });
       toast('Moved to today');
@@ -389,8 +317,7 @@ export async function onClick(e, { rerender, clearSearch }) {
 export function onChange(e, { rerender }) {
   const el = e.target;
   if (el.dataset.action === 'toggle') {
-    const task = store.setCompleted(el.dataset.id, el.checked);
-    if (task.completed) toast('Nice work — task completed');
+    handleTaskToggle(el);
   } else if (el.dataset.action === 'pick-day') {
     if (isValidISO(el.value)) {
       view.date = el.value;

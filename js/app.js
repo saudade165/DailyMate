@@ -4,7 +4,12 @@ import * as store from './store.js';
 import { ROUTES, DEFAULT_ROUTE, findRoute } from './routes.js';
 import { todayISO } from './dates.js';
 import { esc, icon } from './ui.js';
+import * as alerts from './alerts.js';
 import * as myDay from './views/myday.js';
+import * as planner from './views/planner.js';
+import * as assistant from './views/assistant.js';
+import * as lists from './views/lists.js';
+import * as reminders from './views/reminders.js';
 import * as profile from './views/profile.js';
 import * as soon from './views/soon.js';
 
@@ -17,14 +22,16 @@ const searchForm = document.getElementById('search-form');
 const searchInput = document.getElementById('search-input');
 const banner = document.getElementById('storage-banner');
 
-const VIEWS = { 'my-day': myDay, profile };
+const VIEWS = { 'my-day': myDay, planner, 'ai-assistant': assistant, lists, reminders, profile };
 
 let currentRoute = DEFAULT_ROUTE;
+let currentParams = [];
 let knownToday = todayISO();
 
-function routeFromHash() {
-  const id = location.hash.replace(/^#\/?/, '');
-  return findRoute(id) ? id : DEFAULT_ROUTE;
+/** "#/planner/week/2026-10-20" -> { id: 'planner', params: ['week', '2026-10-20'] } */
+function parseHash() {
+  const [id, ...params] = location.hash.replace(/^#\/?/, '').split('/').map(decodeURIComponent);
+  return findRoute(id) ? { id, params: params.filter(Boolean) } : { id: DEFAULT_ROUTE, params: [] };
 }
 
 function currentView() {
@@ -39,7 +46,7 @@ function renderNav() {
       <a class="nav__link" href="#/${r.id}" ${r.id === currentRoute ? 'aria-current="page"' : ''}>
         ${icon(r.icon, 'nav__icon')}
         <span class="nav__label">${esc(r.label)}</span>
-        ${r.ready ? '' : '<span class="nav__soon">Soon</span>'}
+        ${r.ready ? (r.plus ? '<span class="nav__plus">Plus</span>' : '') : '<span class="nav__soon">Soon</span>'}
       </a>
     </li>`).join('');
 
@@ -60,7 +67,7 @@ function renderProfileChip() {
 }
 
 const BANNER_TEXT = {
-  unavailable: 'Your browser is blocking storage, so tasks will be lost when you close this page. Try turning off private browsing.',
+  unavailable: 'Your browser is blocking storage, so your data will be lost when you close this page. Try turning off private browsing.',
   quota: 'Your browser’s storage is full, so the latest change could not be saved.',
   corrupt: 'Some saved data could not be read, so DailyMate started fresh. A copy of the old data was kept in this browser.',
 };
@@ -75,18 +82,29 @@ function renderBanner() {
 
 function renderView() {
   // Keep keyboard focus on the "same" control across re-renders.
-  const focusKey = main.contains(document.activeElement) ? document.activeElement.dataset.focusKey : null;
+  const active = document.activeElement;
+  const focusKey = main.contains(active) ? active.dataset.focusKey : null;
+  const isText = focusKey && (active.tagName === 'TEXTAREA' || (active.tagName === 'INPUT' && /^(text|search|)$/.test(active.type)));
+  const selection = isText && typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null;
+  const typed = isText ? active.value : null;
   const scrollY = window.scrollY;
 
   const view = currentView();
   const route = findRoute(currentRoute);
-  main.innerHTML = view ? view.render() : soon.render(route);
-  document.title = `${route.label} · DailyMate`;
+  main.innerHTML = view ? view.render(currentParams) : soon.render(route);
+  document.title = `${view?.pageTitle?.(currentParams) ?? route.label} · DailyMate`;
 
   if (focusKey) {
-    main.querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
+    const el = main.querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`);
+    el?.focus({ preventScroll: true });
+    // Don't lose what the person was typing when something else changes.
+    if (el && typed !== null && 'value' in el) el.value = typed;
+    if (el && selection && typeof el.setSelectionRange === 'function') {
+      try { el.setSelectionRange(...selection); } catch { /* not a text field */ }
+    }
     window.scrollTo(0, scrollY);
   }
+  view?.afterRender?.(currentParams, viewCtx);
 }
 
 function renderAll() {
@@ -106,12 +124,20 @@ function setMenuOpen(open) {
 }
 
 function onRouteChange() {
-  currentRoute = routeFromHash();
+  ({ id: currentRoute, params: currentParams } = parseHash());
   setMenuOpen(false);
   renderNav();
   renderView();
   window.scrollTo(0, 0);
   main.focus({ preventScroll: true });
+}
+
+/** Updates the address within the current section without a full page change (keeps scroll and focus). */
+function replacePath(params) {
+  currentParams = params;
+  const hash = `#/${[currentRoute, ...params].map(encodeURIComponent).join('/')}`;
+  if (location.hash !== hash) history.replaceState(null, '', hash);
+  renderView();
 }
 
 function clearSearch() {
@@ -123,11 +149,16 @@ function clearSearch() {
 
 // ---- Events ---------------------------------------------------------------------
 
-const viewCtx = { rerender: renderView, clearSearch };
+const viewCtx = { rerender: renderView, clearSearch, replacePath, params: () => currentParams };
 
 main.addEventListener('click', (e) => currentView()?.onClick?.(e, viewCtx));
 main.addEventListener('change', (e) => currentView()?.onChange?.(e, viewCtx));
 main.addEventListener('submit', (e) => currentView()?.onSubmit?.(e, viewCtx));
+main.addEventListener('input', (e) => currentView()?.onInput?.(e, viewCtx));
+main.addEventListener('keydown', (e) => currentView()?.onKeydown?.(e, viewCtx));
+['dragstart', 'dragover', 'dragleave', 'drop', 'dragend'].forEach((type) => {
+  main.addEventListener(type, (e) => currentView()?.onDrag?.(e, viewCtx));
+});
 
 document.addEventListener('click', (e) => {
   const action = e.target.closest('[data-action]')?.dataset.action;
@@ -165,6 +196,7 @@ setInterval(() => {
 
 store.init();
 store.subscribe(renderAll);
-currentRoute = routeFromHash();
+({ id: currentRoute, params: currentParams } = parseHash());
 renderNav();
 renderAll();
+alerts.start({ onTick: () => { if (currentRoute === 'reminders') renderView(); } });

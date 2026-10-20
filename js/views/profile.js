@@ -1,17 +1,18 @@
 // Profile & Subscription. Only the parts that really work are interactive:
-// the display name and a data backup. Plans are shown for information —
-// payments are not connected yet.
+// the display name and backing up / restoring data. Plans are shown for
+// information — payments are not connected yet.
 
 import * as store from '../store.js';
 import { todayISO } from '../dates.js';
+import { confirmAction } from '../dialogs.js';
 import { esc, icon, toast } from '../ui.js';
 
 export const title = 'Profile & Subscription';
 
 const FREE_FEATURES = [
-  'Plan your day with tasks',
-  'Dates, times and priorities',
-  'Lists and basic reminders (coming soon)',
+  'My Day and the Planner (day, week, month)',
+  'Dates, times, priorities and repeating tasks',
+  'Lists and reminders',
 ];
 const PLUS_FEATURES = [
   'Everything in Free',
@@ -26,6 +27,10 @@ const featureList = (items) =>
 export function render() {
   const { name } = store.getProfile();
   const taskCount = store.getTasks().length;
+  const listCount = store.getLists().length;
+  const reminderCount = store.getReminders().length;
+  const hasData = taskCount + listCount + reminderCount > 0;
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   return `
     <div class="page page--narrow">
       <header class="page-head">
@@ -72,9 +77,13 @@ export function render() {
 
       <section class="card" aria-labelledby="data-h">
         <h2 class="card__title" id="data-h">Your data</h2>
-        <p>Your tasks are saved <strong>in this browser on this device only</strong>. They are not synced to the cloud yet, and clearing your browser data will remove them.</p>
-        <p class="muted">You have ${taskCount} ${taskCount === 1 ? 'task' : 'tasks'} saved.</p>
-        <button class="btn btn--outline" type="button" data-action="export" ${taskCount ? '' : 'disabled'}>Download a backup</button>
+        <p>Your tasks, lists and reminders are saved <strong>in this browser on this device only</strong>. They are not synced to the cloud yet, and clearing your browser data will remove them. A backup file lets you move them to another device.</p>
+        <p class="muted">Saved now: ${plural(taskCount, 'task', 'tasks')}, ${plural(listCount, 'list', 'lists')}, ${plural(reminderCount, 'reminder', 'reminders')}.</p>
+        <div class="btn-row">
+          <button class="btn btn--outline" type="button" data-action="export" ${hasData ? '' : 'disabled'}>Download a backup</button>
+          <label class="btn btn--outline" for="restore-file">Restore from a backup…</label>
+          <input class="visually-hidden" id="restore-file" type="file" accept="application/json,.json" data-action="restore">
+        </div>
       </section>
     </div>`;
 }
@@ -86,9 +95,38 @@ export function onSubmit(e) {
   toast('Name saved');
 }
 
+export async function onChange(e) {
+  const input = e.target;
+  if (input.dataset.action !== 'restore' || !input.files?.length) return;
+  const file = input.files[0];
+  input.value = '';
+  let data;
+  try {
+    if (file.size > 5 * 1024 * 1024) throw new Error('too big');
+    data = JSON.parse(await file.text());
+    if (!Array.isArray(data?.tasks)) throw new Error('not a backup');
+  } catch {
+    toast('That file isn’t a DailyMate backup.', { tone: 'error' });
+    return;
+  }
+  const n = (v) => (Array.isArray(v) ? v.length : 0);
+  const ok = await confirmAction({
+    title: 'Replace your data with this backup?',
+    message: `The backup has ${n(data.tasks)} tasks, ${n(data.lists)} lists and ${n(data.reminders)} reminders. Everything currently saved in this browser will be replaced.`,
+    confirmLabel: 'Replace my data',
+  });
+  if (!ok) return;
+  try {
+    const counts = store.importData(data);
+    toast(`Backup restored: ${counts.tasks} tasks, ${counts.lists} lists, ${counts.reminders} reminders`);
+  } catch {
+    toast('That file isn’t a DailyMate backup.', { tone: 'error' });
+  }
+}
+
 export function onClick(e) {
   if (!e.target.closest('[data-action="export"]')) return;
-  const data = JSON.stringify({ exportedAt: new Date().toISOString(), tasks: store.getTasks(), profile: store.getProfile() }, null, 2);
+  const data = JSON.stringify(store.exportData(), null, 2);
   const url = URL.createObjectURL(new Blob([data], { type: 'application/json' }));
   const a = Object.assign(document.createElement('a'), { href: url, download: `dailymate-backup-${todayISO()}.json` });
   document.body.append(a);

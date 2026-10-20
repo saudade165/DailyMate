@@ -3,26 +3,10 @@
 
 export const ROUTES = [
   { id: 'my-day', label: 'My Day', icon: 'home', ready: true },
-  {
-    id: 'planner', label: 'Planner', icon: 'calendar', ready: false,
-    blurb: 'See your week and month at a glance and move tasks between days.',
-    meanwhile: 'You can already plan any day from My Day — use the arrows or the date picker above your task list.',
-  },
-  {
-    id: 'ai-assistant', label: 'AI Assistant', icon: 'sparkle', ready: false, plus: true,
-    blurb: 'Describe your day in your own words and DailyMate Plus will turn it into a tidy plan with tasks.',
-    meanwhile: 'The AI Assistant will be part of DailyMate Plus. It is not connected yet, so nothing you type is sent anywhere.',
-  },
-  {
-    id: 'lists', label: 'Lists', icon: 'list', ready: false,
-    blurb: 'Keep shopping lists, packing lists and other checklists in one place.',
-    meanwhile: 'For now, you can add these as tasks in My Day and use the Notes field for details.',
-  },
-  {
-    id: 'reminders', label: 'Reminders', icon: 'bell', ready: false,
-    blurb: 'Get a gentle notification before a task is due, on your computer or phone.',
-    meanwhile: 'Add a time to your tasks in My Day so they appear in order through the day.',
-  },
+  { id: 'planner', label: 'Planner', icon: 'calendar', ready: true },
+  { id: 'ai-assistant', label: 'AI Assistant', icon: 'sparkle', ready: true, plus: true },
+  { id: 'lists', label: 'Lists', icon: 'list', ready: true },
+  { id: 'reminders', label: 'Reminders', icon: 'bell', ready: true },
   {
     id: 'progress', label: 'Progress', icon: 'chart', ready: false,
     blurb: 'See how many tasks you finish each week and celebrate your streaks.',
