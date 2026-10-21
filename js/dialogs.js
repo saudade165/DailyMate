@@ -350,3 +350,36 @@ export function confirmAction({ title, message, confirmLabel = 'Delete', tone = 
   });
 }
 
+
+const choiceDialog = document.getElementById('choice-dialog');
+
+/**
+ * Asks the person to pick one of `options` ([{ value, label, tone }]). The dialog
+ * can't be dismissed with Esc or the backdrop, because both choices matter.
+ */
+export function chooseAction({ title, message, options }) {
+  document.getElementById('choice-title').textContent = title;
+  document.getElementById('choice-message').textContent = message;
+  const actions = document.getElementById('choice-actions');
+  actions.innerHTML = '';
+  for (const o of options) {
+    const b = Object.assign(document.createElement('button'), { type: 'button', textContent: o.label });
+    b.className = `btn ${o.tone === 'primary' ? 'btn--primary' : 'btn--outline'}`;
+    b.dataset.value = o.value;
+    actions.append(b);
+  }
+  choiceDialog.showModal();
+  return new Promise((resolve) => {
+    const onClick = (e) => {
+      const b = e.target.closest('button[data-value]');
+      if (!b) return;
+      choiceDialog.removeEventListener('click', onClick);
+      choiceDialog.removeEventListener('cancel', onCancel);
+      choiceDialog.close();
+      resolve(b.dataset.value);
+    };
+    const onCancel = (e) => e.preventDefault();
+    choiceDialog.addEventListener('click', onClick);
+    choiceDialog.addEventListener('cancel', onCancel);
+  });
+}

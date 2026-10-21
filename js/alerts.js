@@ -1,8 +1,10 @@
-// Reminder alerts. These work only while DailyMate is open in a browser tab:
-// a card appears on screen and, if the person allowed it, the browser shows a
-// notification. Alerts when the app is closed would need a push server (see README).
+// On-screen reminder alerts while DailyMate is open: a card appears with Done and
+// Snooze. If the browser allowed notifications and push isn't on for this device,
+// a background tab also shows a browser notification. When push is on, the server
+// sends the notification instead (also when DailyMate is closed) — see js/push.js.
 
 import * as store from './store.js';
+import { isOnHere as pushIsOn } from './push.js';
 import { formatTime, relativeDay, instantToLocal } from './dates.js';
 import { esc, icon, toast } from './ui.js';
 
@@ -15,11 +17,6 @@ let lastHTML = '';
 
 export const notificationsSupported = () => typeof window.Notification === 'function';
 export const notificationPermission = () => (notificationsSupported() ? Notification.permission : 'unsupported');
-
-export async function requestNotifications() {
-  if (!notificationsSupported()) return 'unsupported';
-  try { return await Notification.requestPermission(); } catch { return Notification.permission; }
-}
 
 const alertKey = (r) => String(store.reminderAlertAt(r));
 
@@ -68,7 +65,7 @@ function check() {
     const key = alertKey(r);
     shown.set(r.id, key);
     store.markReminderAlerted(r.id, key); // so it isn't shown again after a reload
-    if (notificationPermission() === 'granted' && document.visibilityState === 'hidden') {
+    if (notificationPermission() === 'granted' && document.visibilityState === 'hidden' && !pushIsOn()) {
       try {
         const n = new Notification(`Reminder: ${r.title}`, { body: r.notes || 'DailyMate', tag: `dm-${r.id}`, icon: 'assets/icon.svg' });
         n.onclick = () => { window.focus(); location.hash = '#/reminders'; n.close(); };

@@ -1,5 +1,5 @@
 -- DailyMate Plus: subscription status and AI request metering.
--- Not applied anywhere yet. Apply to the Supabase project that will host the AI function (see supabase/README.md).
+-- Applied to the DailyMate Supabase project. The AI function itself is not deployed yet (see supabase/README.md).
 --
 -- Rules enforced here, on the server:
 --   * Only users with plan = 'plus', an active/trialing status and a current billing period may use AI.

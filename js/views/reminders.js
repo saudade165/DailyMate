@@ -6,7 +6,8 @@ import { addDays, formatTime, fromNow, instantToLocal, localTimeZone, relativeDa
 import { describeRepeat } from '../repeat.js';
 import { openReminderDialog, confirmAction } from '../dialogs.js';
 import { emptyState } from '../components.js';
-import { notificationPermission, requestNotifications } from '../alerts.js';
+import * as cloud from '../cloud.js';
+import * as push from '../push.js';
 import { esc, icon, toast } from '../ui.js';
 
 const TABS = [
@@ -90,21 +91,25 @@ function group(id, title, items, now, opts = {}) {
 }
 
 function notificationCard() {
-  const perm = notificationPermission();
-  let status;
+  const signedIn = cloud.getAuth().status === 'signed-in';
+  let text;
   let action = '';
-  if (perm === 'granted') status = `${icon('check-circle')}<strong>Browser notifications are on.</strong> You’ll also get a notification if DailyMate is open in a background tab.`;
-  else if (perm === 'denied') status = `${icon('alert')}<strong>Browser notifications are blocked.</strong> To allow them, open your browser’s site settings for DailyMate. Reminders still appear on screen while DailyMate is open.`;
-  else if (perm === 'unsupported') status = `${icon('alert')}This browser can’t show notifications. Reminders appear on screen while DailyMate is open.`;
-  else {
-    status = 'Want a notification even when DailyMate is in a background tab? Allow browser notifications.';
-    action = `<button class="btn btn--outline btn--sm" type="button" data-action="allow-notifications" data-focus-key="allow-notif">${icon('bell')}Allow notifications</button>`;
+  if (push.isOnHere()) {
+    text = `${icon('check-circle')}<strong>Notifications are on for this device.</strong> You’ll be reminded even when DailyMate is closed.`;
+    action = '<a class="btn btn--outline btn--sm" href="#/notifications">Settings</a>';
+  } else if (signedIn) {
+    text = 'Turn on notifications to be reminded even when DailyMate is closed.';
+    action = `<a class="btn btn--outline btn--sm" href="#/notifications">${icon('bell')}Turn on notifications</a>`;
+  } else {
+    text = '<a href="#/account/sign-up">Create a free account</a> to get notifications even when DailyMate is closed.';
+    action = `<a class="btn btn--outline btn--sm" href="#/notifications">${icon('bell')}Notification options</a>`;
   }
   return `
     <section class="card card--note" aria-labelledby="how-h">
       <h2 class="card__title" id="how-h">${icon('bell', 'card__title-icon')}How reminders work</h2>
-      <p>When a reminder is due, DailyMate shows it on screen — <strong>as long as DailyMate is open in your browser</strong>. If the browser or the app is closed, the reminder waits and appears as <em>Overdue</em> next time you open DailyMate. Phone and email alerts aren’t available yet.</p>
-      <div class="note-row"><p class="muted">${status}</p>${action}</div>
+      <p>While DailyMate is open, due reminders appear on screen. With notifications turned on, your device also alerts you when DailyMate is closed
+        (on iPhone and iPad only after adding DailyMate to the Home Screen). Email and text-message alerts aren’t available.</p>
+      <div class="note-row"><p class="muted">${text}</p>${action}</div>
     </section>`;
 }
 
@@ -191,12 +196,6 @@ export async function onClick(e, ctx) {
         store.deleteReminder(id);
         toast('Reminder deleted', { action: { label: 'Undo', onClick: () => store.restoreReminder(r) } });
       }
-      break;
-    }
-    case 'allow-notifications': {
-      const result = await requestNotifications();
-      toast(result === 'granted' ? 'Notifications allowed' : 'Notifications were not allowed', { tone: result === 'granted' ? 'default' : 'error' });
-      ctx.rerender();
       break;
     }
     default:

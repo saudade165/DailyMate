@@ -935,3 +935,81 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
 }
+
+/* ---------- Accounts, notifications, legal ---------- */
+
+.account-line {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+  padding: 10px 12px; border-radius: var(--radius); color: var(--text); text-decoration: none;
+}
+.account-line:hover { background: var(--surface-2); }
+.account-line > .icon { color: var(--primary); flex: none; }
+.account-line span { min-width: 0; display: flex; flex-direction: column; line-height: 1.3; }
+.account-line strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }
+.account-line small { color: var(--text-muted); font-size: 14px; }
+
+.page--auth { max-width: 520px; }
+.auth-card { display: flex; flex-direction: column; gap: 16px; }
+.auth-form { display: flex; flex-direction: column; gap: 16px; }
+.auth-form .field { margin: 0; }
+.auth-links { margin: 0; text-align: center; }
+.auth-msgs { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.auth-msgs:empty { display: none; }
+.password-row { display: flex; gap: 8px; align-items: center; }
+.password-row .input { flex: 1; min-width: 0; }
+
+.form-msg {
+  display: flex; gap: 10px; align-items: flex-start; margin: 0;
+  padding: 12px 14px; border-radius: var(--radius-sm); line-height: 1.45;
+}
+.form-msg .icon { flex: none; margin-top: 2px; }
+.form-msg--info { background: var(--primary-soft); color: var(--text); }
+.form-msg--info .icon { color: var(--primary); }
+.form-msg--error { background: var(--red-soft); color: var(--red); }
+
+.status-line { display: flex; gap: 10px; align-items: flex-start; line-height: 1.5; }
+.status-line .icon { flex: none; margin-top: 3px; color: var(--primary); }
+.text-warn { color: var(--red); }
+
+.details { margin-top: 16px; }
+.details summary { cursor: pointer; font-weight: 600; color: var(--primary); padding: 6px 0; }
+.plain-list { margin: 8px 0 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; line-height: 1.5; }
+
+.device-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.device { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+.device:first-child { border-top: 0; }
+.device__icon { color: var(--primary); flex: none; }
+.device__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; overflow-wrap: anywhere; }
+
+.legal { line-height: 1.6; overflow-wrap: anywhere; }
+.legal h2 { font-size: 20px; margin: 24px 0 8px; }
+.legal p, .legal ul { margin: 0 0 12px; }
+.legal ul { padding-left: 22px; }
+.legal li + li { margin-top: 6px; }
+.placeholder { background: var(--amber-soft); color: var(--amber); padding: 0 4px; border-radius: 4px; }
+.link-row { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 0; }
+
+.table-wrap { overflow-x: auto; margin: 0 0 12px; -webkit-overflow-scrolling: touch; }
+.table { width: 100%; border-collapse: collapse; font-size: 15px; }
+.table th, .table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.table th { color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+.table code { font-size: 13px; overflow-wrap: anywhere; }
+
+.danger-zone { margin-top: 24px; padding: 18px; border: 1px solid #f0c4bf; border-radius: var(--radius); background: var(--red-soft); }
+.danger-zone h2 { margin-top: 0; color: var(--red); }
+.danger-zone .field { max-width: 320px; }
+
+.dialog__actions--stack { flex-wrap: wrap; }
+
+.site-footer { padding: 0 var(--gutter) 32px; }
+.site-footer nav {
+  max-width: 1240px; margin: 0 auto; padding-top: 16px; border-top: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 15px;
+}
+.site-footer a { color: var(--text-muted); }
+.site-footer a:hover { color: var(--primary); }
+
+@media (max-width: 640px) {
+  .dialog__actions--stack { flex-direction: column-reverse; align-items: stretch; }
+  .table { font-size: 14px; }
+}

@@ -1,13 +1,20 @@
 {
+  "id": "./",
   "name": "DailyMate",
   "short_name": "DailyMate",
-  "description": "Your day, organized.",
+  "description": "Plan your day, manage tasks and remember what matters.",
+  "lang": "en-CA",
   "start_url": "./#/my-day",
   "scope": "./",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#f4f7fb",
   "theme_color": "#f4f7fb",
+  "categories": ["productivity", "lifestyle"],
   "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
     { "src": "assets/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]
 }

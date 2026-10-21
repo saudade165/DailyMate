@@ -8,6 +8,10 @@
   <meta name="theme-color" content="#F5F8FC">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="assets/icon-192.png" type="image/png" sizes="192x192">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-title" content="DailyMate">
+  <meta name="mobile-web-app-capable" content="yes">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -95,6 +99,16 @@
       <div class="storage-banner" id="storage-banner" role="alert" hidden></div>
 
       <main id="main" class="view" tabindex="-1"><!-- rendered by router --></main>
+
+      <footer class="site-footer">
+        <nav aria-label="Legal and settings">
+          <a href="#/privacy">Privacy</a>
+          <a href="#/terms">Terms</a>
+          <a href="#/cookies">Storage &amp; cookies</a>
+          <a href="#/notifications">Notifications</a>
+          <a href="#/delete-account">Delete account</a>
+        </nav>
+      </footer>
     </div>
   </div>
 
@@ -262,6 +276,15 @@
         <button class="btn btn--ghost" value="cancel" autofocus>Cancel</button>
         <button class="btn btn--danger" value="confirm" id="confirm-ok">Delete</button>
       </div>
+    </form>
+  </dialog>
+
+  <!-- A choice that must be made explicitly (no closing with Esc or the backdrop) -->
+  <dialog class="dialog dialog--small" id="choice-dialog" aria-labelledby="choice-title" aria-describedby="choice-message">
+    <form method="dialog" class="dialog__form">
+      <h2 class="dialog__title" id="choice-title"></h2>
+      <p class="dialog__text" id="choice-message"></p>
+      <div class="dialog__actions dialog__actions--stack" id="choice-actions"></div>
     </form>
   </dialog>
 

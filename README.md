@@ -9,10 +9,10 @@ No build step and no dependencies — it's plain HTML, CSS and JavaScript (ES mo
 ES modules don't load from `file://`, so serve the folder:
 
 ```bash
-python3 -m http.server 5173
+python3 -m http.server 5174
 ```
 
-Then open http://localhost:5173.
+Then open http://localhost:5174 (the address allowed by the server for development).
 
 ## What works today
 
@@ -36,51 +36,92 @@ Then open http://localhost:5173.
   a task; Overdue / Today / Tomorrow / Later this week / Later / Done; snooze.
   Each reminder stores the time zone it was set in and is shown on this device's
   clock (daylight-saving changes handled).
-- **AI Assistant** — finished screen (chat, examples, suggested tasks you can add
-  or edit first, loading / error / limit states). It is **locked**: there are no
-  accounts or payments yet, so no one is on DailyMate Plus, and no AI server is
-  connected. Nothing typed there is sent anywhere. See `supabase/README.md`.
-- **Profile & Subscription** — display name, plan comparison (information only),
-  backup download and restore (tasks, lists, reminders).
-- Progress and Goals still show an honest "Coming soon" page.
+- **Accounts** (`#/account`) — sign up with email + password, email confirmation,
+  sign in/out, forgot/reset password, delete account (`#/delete-account`).
+  Without an account everything still works on this device only.
+- **Cloud sync** — when signed in, tasks, lists, reminders and the display name sync
+  between devices through Supabase. The app keeps working offline; changes wait in
+  an outbox and upload later. Per-item "latest change wins", also enforced by the
+  server. On first sign-in, data already on the device can be added to the account
+  (or kept out, after downloading a copy).
+- **Push notifications** (`#/notifications`) — opt-in per device; reminders are
+  sent by the server even when DailyMate is closed (see limits below); test button;
+  list and remove devices. Email is used only for account emails. No SMS.
+- **Installable app (PWA)** — manifest with PNG icons (192, 512, maskable), service
+  worker with an offline copy of the app. Updates are fetched first when online.
+- **Privacy pages** — Privacy Policy, Terms, Storage & cookies, account deletion
+  (drafts — see below). Linked from the footer and Profile.
+- **Admin** (`#/admin`, admins only, checked on the server) — accounts with counts,
+  push device and delivery status, server log, cron/migration status, audit log.
+- **AI Assistant** — finished screen, still **locked**: no AI provider or payments
+  are connected, so no one is on DailyMate Plus. The server-side quota is in place.
+  Nothing typed there is sent anywhere. See `supabase/README.md`.
+- **Profile & Subscription** — account and sync status, display name, plan
+  comparison (information only), backup download and restore.
+- Progress and Goals still show an honest "Coming soon" page (the database already
+  has a `goals` table).
 
 ### Reminder alerts — what works and what doesn't
 
-When a reminder is due, DailyMate shows a card on screen (Done / Snooze 10 min)
-**while the app is open in a browser tab**, and a browser notification if the
-person allowed notifications and the tab is in the background. There are **no**
-alerts when the browser or app is closed, and no email/SMS/phone push: that needs
-a server that stores reminders and sends Web Push (service worker + VAPID keys +
-a scheduled job, e.g. Supabase cron + an Edge Function). Missed reminders show
-as *Overdue* the next time DailyMate is opened.
+- While DailyMate is open: an on-screen card (Done / Snooze 10 min), with or without an account.
+- With an account and notifications turned on for a device: the server sends a Web
+  Push notification when the reminder is due, also when DailyMate is closed. Checked
+  every minute; repeating reminders alert for every occurrence until marked done.
+- **Device limits:** Android and desktop Chrome/Edge/Firefox/Safari support it (desktop
+  browsers must be running, at least in the background). iPhone/iPad only after
+  *Add to Home Screen* (iOS 16.4+). Delivery is best-effort; do-not-disturb and
+  battery savers apply.
+- **Tested so far:** the full server path against real push services (FCM and
+  Mozilla answered; delivery records, expiry handling and no duplicates verified)
+  and the encryption against a reference library. **Not yet tested on a real phone
+  or desktop browser receiving a notification** — the testing browser doesn't
+  allow service workers.
+- No email or SMS reminders.
 
-## Storage — important
+## Storage, cookies and privacy
 
-Data is stored in the browser's **localStorage** (key `dailymate.v1`, format
-version 2 — data saved by older versions loads unchanged) on this device only.
-There is no account, no cloud sync and no backend yet. Clearing browser data
-deletes everything — use *Profile → Download a backup*. All storage access goes
-through `js/store.js`, so it can be replaced by an API client without touching
-the UI. The AI conversation is kept only for the browser session (sessionStorage).
+DailyMate sets **no cookies** and has no analytics, ads or trackers, so it shows no
+cookie banner. Browser storage it uses is listed on `#/cookies`:
+`dailymate.v1` (data), `dailymate.auth` (sign-in session), `dailymate.outbox` /
+`dailymate.sync` (sync), `dailymate.push` (this device's notification setting),
+session storage for the AI chat, and a cache of the app's files.
+
+The legal pages are **drafts** that describe the actual behaviour. Operator name,
+contact email, address and privacy contact are placeholders — fill in `LEGAL` in
+`js/config.js`. Have them reviewed (PIPEDA; Québec Law 25, which among other things
+requires naming a person responsible for personal information and assessing
+transfers outside Québec) before charging money or launching widely.
+
+## Backend
+
+Supabase project in Canada (ca-central-1), Free plan. Schema, Edge Functions,
+cron jobs, admin setup and the **dashboard settings that still have to be made by
+the owner** (custom SMTP, redirect URLs) are documented in `supabase/README.md`.
 
 ## Structure
 
 ```
-index.html              App shell, dialogs (task, reminder, list, confirm), icon sprite
+index.html              App shell, dialogs, icon sprite, footer
+sw.js                   Service worker: push notifications + offline copy of the app
 css/styles.css          Design tokens, components, responsive rules
-js/app.js               Router (#/section/param…), navigation, search, re-rendering
-js/store.js             Data layer (localStorage): tasks, lists, reminders, backup
+js/app.js               Router (#/section/param…), navigation, search, accounts, re-rendering
+js/store.js             Local data (localStorage): tasks, lists, reminders, backup, owner
+js/cloud.js             Supabase Auth (loads the library only when needed)
+js/sync.js              Cloud sync: outbox, download/merge, conflict rules
+js/push.js              Push subscription on this device, test, device list
 js/dates.js             Local dates, formatting, time-zone conversion
 js/repeat.js            Repeat rules shared by tasks and reminders
 js/components.js        Task row and task actions shared by My Day and Planner
-js/dialogs.js           Task / reminder / list forms and the confirm dialog
-js/alerts.js            On-screen reminder alerts and browser notifications
+js/dialogs.js           Task / reminder / list forms, confirm and choice dialogs
+js/alerts.js            On-screen reminder alerts while the app is open
 js/templates.js         Starter lists (Groceries, Home, Errands, Shopping)
 js/ai.js                Client for the AI server function (no keys in the browser)
-js/config.js            Public settings (AI endpoint URL — never secrets)
+js/config.js            Public settings: Supabase URL + publishable key, AI endpoint, legal details
 js/routes.js            Navigation items and "Coming soon" copy
 js/ui.js                Escaping, icons, toasts (with Undo)
-js/views/*.js           My Day, Planner, AI Assistant, Lists, Reminders, Profile, Coming soon
-supabase/               AI server function + database schema (not deployed) — see supabase/README.md
-manifest.webmanifest    PWA manifest (groundwork for Android install)
+js/vendor/              supabase-js 2.117.2 (MIT), served from this site — no CDN
+js/views/*.js           My Day, Planner, AI, Lists, Reminders, Profile, Account,
+                        Notifications, Admin, legal pages, Coming soon
+supabase/               Migrations and Edge Functions — see supabase/README.md
+manifest.webmanifest    PWA manifest; assets/ has the icons
 ```

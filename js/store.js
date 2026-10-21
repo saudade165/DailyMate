@@ -1,6 +1,10 @@
-// Data layer. For now everything lives in this browser's localStorage — there is
-// no account and no cloud sync. Keep the public API (getTasks, addTask, …) stable
-// so this module can later be swapped for a real backend without touching the UI.
+// Data layer. Everything is kept in this browser's localStorage, so the app works
+// offline and without an account. When someone signs in, js/sync.js copies changes
+// to and from their account: it watches changes through setChangeHook() and puts
+// data from the cloud in place with applyRemote().
+//
+// `owner` is the account this saved data belongs to (null = not signed in), so one
+// person's data is never shown to, or uploaded into, someone else's account.
 
 import { dayNumber, isValidISO, isValidTime, isValidTimeZone, localTimeZone, todayISO, zonedToInstant } from './dates.js';
 import { isRepeat, nextDate, nextDateFrom } from './repeat.js';
@@ -17,11 +21,13 @@ const ITEMS_PER_LIST_MAX = 500;
 const LISTS_MAX = 100;
 
 let state = emptyState();
+let committed = state; // the state the change hook last saw
 let persistError = null; // null | 'unavailable' | 'quota' | 'corrupt'
 const listeners = new Set();
+let changeHook = null; // (previous state, next state) => void — called for the person's own changes
 
 function emptyState() {
-  return { tasks: [], lists: [], reminders: [], profile: { name: '' } };
+  return { owner: null, tasks: [], lists: [], reminders: [], profile: { name: '', updatedAt: null } };
 }
 
 function newId() {
@@ -104,10 +110,14 @@ function normalizeReminder(raw) {
 function normalizeState(data) {
   const arr = (v, fn) => (Array.isArray(v) ? v.map(fn).filter(Boolean) : []);
   return {
+    owner: typeof data.owner === 'string' && data.owner ? data.owner : null,
     tasks: arr(data.tasks, normalizeTask),
     lists: arr(data.lists, normalizeList).slice(0, LISTS_MAX),
     reminders: arr(data.reminders, normalizeReminder),
-    profile: { name: typeof data.profile?.name === 'string' ? data.profile.name.slice(0, NAME_MAX) : '' },
+    profile: {
+      name: typeof data.profile?.name === 'string' ? data.profile.name.slice(0, NAME_MAX) : '',
+      updatedAt: typeof data.profile?.updatedAt === 'string' ? data.profile.updatedAt : null,
+    },
   };
 }
 
@@ -119,9 +129,10 @@ function readStorage() {
     persistError = 'unavailable';
     return;
   }
-  if (!raw) return;
+  if (!raw) { state = emptyState(); committed = state; return; }
   try {
     state = normalizeState(JSON.parse(raw));
+    committed = state;
   } catch {
     // Keep the unreadable copy so nothing is silently lost, then start fresh.
     try { localStorage.setItem(`${STORAGE_KEY}.corrupt-${Date.now()}`, raw); } catch { /* ignore */ }
@@ -143,7 +154,10 @@ function emit() {
 }
 
 function commit() {
+  const previous = committed;
+  committed = state;
   persist();
+  changeHook?.(previous, state);
   emit();
 }
 
@@ -257,7 +271,7 @@ export function deleteTask(id) {
 }
 
 export function setProfileName(name) {
-  state = { ...state, profile: { ...state.profile, name: name.trim().slice(0, NAME_MAX) } };
+  state = { ...state, profile: { name: name.trim().slice(0, NAME_MAX), updatedAt: new Date().toISOString() } };
   commit();
 }
 
@@ -453,13 +467,51 @@ export function deleteReminder(id) {
 // ---- Backup -------------------------------------------------------------------
 
 export function exportData() {
-  return { app: 'DailyMate', version: VERSION, exportedAt: new Date().toISOString(), ...state };
+  const { owner, ...data } = state;
+  return { app: 'DailyMate', version: VERSION, exportedAt: new Date().toISOString(), ...data };
 }
 
 /** Replaces all data with a backup. Returns counts, or throws if the file isn't a DailyMate backup. */
 export function importData(data) {
   if (!data || typeof data !== 'object' || !Array.isArray(data.tasks)) throw new Error('Not a DailyMate backup');
-  state = normalizeState(data);
+  // A backup never changes whose account this is.
+  state = normalizeState({ ...data, owner: state.owner });
   commit();
   return { tasks: state.tasks.length, lists: state.lists.length, reminders: state.reminders.length };
+}
+
+// ---- Sync support (used by js/sync.js) -------------------------------------------
+
+/** The whole current state (treat as read-only). */
+export const getState = () => state;
+export const getOwner = () => state.owner;
+export const hasData = () => state.tasks.length + state.lists.length + state.reminders.length > 0 || !!state.profile.name;
+
+/** `fn(previous, next)` runs after each change the person makes (not for applyRemote). */
+export function setChangeHook(fn) {
+  changeHook = fn;
+}
+
+/** Marks this saved data as belonging to an account (or to nobody). */
+export function setOwner(owner) {
+  state = { ...state, owner: owner || null };
+  committed = state;
+  persist();
+  emit();
+}
+
+/** Puts data that came from the cloud in place, without treating it as a new local change. */
+export function applyRemote(next) {
+  state = normalizeState({ ...next, owner: state.owner });
+  committed = state;
+  persist();
+  emit();
+}
+
+/** Empties this browser's copy (used on sign-out and account deletion). */
+export function resetLocal() {
+  state = emptyState();
+  committed = state;
+  persist();
+  emit();
 }

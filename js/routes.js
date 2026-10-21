@@ -1,5 +1,5 @@
 // Navigation definition. `ready: false` sections show an honest "Coming soon"
-// page instead of a fake screen.
+// page instead of a fake screen. `hidden` routes work but aren't in the menu.
 
 export const ROUTES = [
   { id: 'my-day', label: 'My Day', icon: 'home', ready: true },
@@ -18,6 +18,14 @@ export const ROUTES = [
     meanwhile: 'You can already add the first step of a goal as a task in My Day.',
   },
   { id: 'profile', label: 'Profile & Subscription', icon: 'user', ready: true },
+  // Reached from Profile, the footer and links — not shown in the menu.
+  { id: 'account', label: 'Account', icon: 'user', ready: true, hidden: true },
+  { id: 'notifications', label: 'Notifications', icon: 'bell', ready: true, hidden: true },
+  { id: 'privacy', label: 'Privacy Policy', icon: 'lock', ready: true, hidden: true },
+  { id: 'terms', label: 'Terms of Service', icon: 'lock', ready: true, hidden: true },
+  { id: 'cookies', label: 'Storage & cookies', icon: 'lock', ready: true, hidden: true },
+  { id: 'delete-account', label: 'Delete your account', icon: 'lock', ready: true, hidden: true },
+  { id: 'admin', label: 'Admin', icon: 'tools', ready: true, hidden: true },
 ];
 
 export const DEFAULT_ROUTE = 'my-day';
