@@ -19,6 +19,9 @@ import * as profile from './views/profile.js';
 import * as account from './views/account.js';
 import * as notifications from './views/notifications.js';
 import * as admin from './views/admin.js';
+import * as progressView from './views/progress.js';
+import * as goalsView from './views/goals.js';
+import { ACHIEVEMENTS, completionsByDay, earnedAchievements, goalProgress, goalReached } from './progress.js';
 import * as legal from './views/legal.js';
 import * as soon from './views/soon.js';
 
@@ -33,6 +36,7 @@ const banner = document.getElementById('storage-banner');
 
 const VIEWS = {
   'my-day': myDay, planner, 'ai-assistant': assistant, lists, reminders, profile, account, notifications, admin,
+  progress: progressView, goals: goalsView,
   privacy: legal.view('privacy'), terms: legal.view('terms'), cookies: legal.view('cookies'), 'delete-account': legal.view('delete-account'),
 };
 
@@ -161,7 +165,7 @@ function onRouteChange() {
 
 /** An unknown address (e.g. an old bookmark) shows My Day — make the address bar say so too. */
 function fixUnknownHash() {
-  if (location.hash.includes('error_description=')) return; // a sign-in link's error: cloud.js reads it first
+  if (cloud.hasPendingLink()) return; // a sign-in link: cloud.js reads it first
   const id = location.hash.replace(/^#\/?/, '').split('/')[0];
   if (id && !findRoute(decodeURIComponent(id))) history.replaceState(null, '', `#/${DEFAULT_ROUTE}`);
 }
@@ -314,12 +318,27 @@ async function signOut() {
   toast('You’re signed out');
 }
 
-const LINK_MESSAGES = {
-  'signed-in': ['info', 'Your email is confirmed and you’re signed in.'],
-  'confirmed-elsewhere': ['info', 'Your email is confirmed. Please sign in.'],
-  recovery: ['info', 'Choose a new password.'],
-  offline: ['error', 'Couldn’t reach the server. Your data on this device is still here.'],
+const LINK_ERRORS = {
+  expired: 'This link has expired or was already used. Links work once and only for a limited time — ask for a new one below.',
+  'other-browser': 'Please open the password-reset link in the same browser where you asked for it — or ask for a new link below.',
+  invalid: 'This link isn’t valid. Please ask for a new one below.',
 };
+
+function handleLinkResult(result) {
+  if (!result) return;
+  if (result.kind === 'offline') { toast('Couldn’t reach the server. Your data on this device is still here.', { tone: 'error' }); return; }
+  if (result.kind === 'recovery') { account.setNotice({ tone: 'info', text: 'Choose a new password.' }); location.hash = '#/account/new-password'; return; }
+  if (result.kind === 'signed-in') { toast('Your email is confirmed and you’re signed in.'); location.hash = '#/my-day'; return; }
+  if (result.kind === 'confirmed-elsewhere') {
+    account.setNotice({ tone: 'info', text: 'Your email is confirmed. Please sign in to continue.' });
+    location.hash = '#/account';
+    return;
+  }
+  // link-error
+  const text = `${LINK_ERRORS[result.reason] ?? LINK_ERRORS.invalid}${result.detail ? ` (${result.detail})` : ''}`;
+  account.setNotice({ tone: 'error', text });
+  location.hash = result.flow === 'recovery' ? '#/account/forgot' : '#/account';
+}
 
 async function startAccounts() {
   sync.init();
@@ -331,23 +350,51 @@ async function startAccounts() {
     }
   });
   cloud.onAuthChange(onAuth);
-  const result = await cloud.start();
-  if (!result) return;
-  if (result.kind === 'recovery') {
-    location.hash = '#/account/new-password';
-  } else if (result.kind === 'link-error') {
-    account.setNotice({ tone: 'error', text: `That link didn’t work (${result.message}). Links expire after a while — you can ask for a new one.` });
-    location.hash = '#/account';
-  } else if (LINK_MESSAGES[result.kind]) {
-    const [tone, text] = LINK_MESSAGES[result.kind];
-    if (result.kind === 'confirmed-elsewhere') { account.setNotice({ tone, text }); location.hash = '#/account'; } else toast(text, { tone: tone === 'error' ? 'error' : 'default' });
-  }
+  handleLinkResult(await cloud.start());
+}
+
+// ---- Goals and achievements ------------------------------------------------------
+// After every change (here or synced from another device): complete goals that reached
+// their target and record newly earned achievements. Both are kept once recorded.
+
+let evaluationQueued = false;
+let firstEvaluation = true;
+function evaluateProgress() {
+  if (evaluationQueued) return;
+  evaluationQueued = true;
+  setTimeout(() => {
+    evaluationQueued = false;
+    const tasks = store.getTasks();
+    const lists = store.getLists();
+    const byDay = completionsByDay(tasks);
+    const news = [];
+    for (const goal of store.getGoals()) {
+      if (goal.status !== 'active') continue;
+      const p = goalProgress(goal, { tasks, lists, byDay });
+      if (goalReached(goal, p)) {
+        store.completeGoal(goal.id, p.current);
+        news.push(`Goal reached: ${goal.title}`);
+      }
+    }
+    const earned = earnedAchievements({ tasks, goals: store.getGoals() });
+    const fresh = store.addAchievements(earned);
+    // Only celebrate what just happened (not old milestones found when data first loads).
+    const recent = fresh.filter((id) => Date.now() - Date.parse(earned[id]) < 10 * 60_000);
+    if (recent.length) {
+      const a = ACHIEVEMENTS.find((x) => x.id === recent[recent.length - 1]);
+      news.push(recent.length === 1 ? `Achievement unlocked: ${a.title}` : `${recent.length} achievements unlocked`);
+    }
+    if (news.length && !firstEvaluation) toast(news.join(' · '));
+    firstEvaluation = false;
+  }, 0);
 }
 
 // ---- Start ----------------------------------------------------------------------
 
 store.init();
 store.subscribe(renderAll);
+store.subscribe(evaluateProgress);
+evaluateProgress();
 ({ id: currentRoute, params: currentParams } = parseHash());
 fixUnknownHash();
 renderNav();

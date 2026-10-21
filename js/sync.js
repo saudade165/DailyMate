@@ -57,6 +57,20 @@ const COLLECTIONS = {
     }),
     tombstone: { title: '-', date: '2000-01-01', time: '00:00', tz: 'UTC' },
   },
+  goals: {
+    table: 'goals',
+    toRow: (g) => ({
+      id: g.id, title: g.title, notes: g.notes, kind: g.kind, target: g.target, start_date: g.startDate, target_date: g.deadline,
+      status: g.status, done: g.status === 'completed', done_at: g.completedAt, priority: g.priority, period: g.period,
+      list_id: g.listId, manual_progress: g.manualProgress, achieved: g.achieved, created_at: g.createdAt,
+    }),
+    fromRow: (r) => ({
+      id: r.id, title: r.title, notes: r.notes, kind: r.kind, target: r.target, startDate: r.start_date, deadline: r.target_date,
+      status: r.status, completedAt: r.done_at, priority: r.priority, period: r.period, listId: r.list_id,
+      manualProgress: r.manual_progress, achieved: r.achieved, createdAt: r.created_at, updatedAt: r.updated_at,
+    }),
+    tombstone: { title: '-' },
+  },
 };
 const NAMES = Object.keys(COLLECTIONS);
 
@@ -100,6 +114,7 @@ function recordChanges(prev, next) {
     for (const id of before.keys()) outbox[`${name}:${id}`] = { op: 'delete', at: iso(Date.now()) };
   }
   if (prev.profile !== next.profile) outbox.profile = { op: 'upsert', at: changeTime(next.profile) };
+  if (prev.achievements !== next.achievements) outbox.achievements = { op: 'upsert', at: iso(Date.now()) };
   saveOutbox();
   schedulePush();
 }
@@ -109,6 +124,7 @@ function queueAll() {
   const s = store.getState();
   for (const name of NAMES) for (const rec of s[name]) outbox[`${name}:${rec.id}`] = { op: 'upsert', at: rec.updatedAt || iso(Date.now()) };
   if (s.profile.name) outbox.profile = { op: 'upsert', at: s.profile.updatedAt || iso(Date.now()) };
+  if (Object.keys(s.achievements).length) outbox.achievements = { op: 'upsert', at: iso(Date.now()) };
   saveOutbox();
 }
 
@@ -172,6 +188,13 @@ async function push() {
       const { error } = await client.from('profiles').update({ display_name: s.profile.name, updated_at: at }).eq('id', uid);
       if (error) throw error;
       done.push(['profile', at]);
+    }
+    if (outbox.achievements) {
+      // Merged on the server (earliest date wins), so devices never remove each other's achievements.
+      const at = outbox.achievements.at;
+      const { error } = await client.rpc('merge_achievements', { p_achievements: s.achievements });
+      if (error) throw error;
+      done.push(['achievements', at]);
     }
     // Only clear what was uploaded; anything changed again meanwhile stays queued.
     for (const [key, at] of done) if (outbox[key]?.at === at) delete outbox[key];
@@ -259,7 +282,7 @@ async function pull() {
     results[name] = await fetchChanged(client, COLLECTIONS[name].table, since);
     for (const r of results[name]) if (!newest || r.synced_at > newest) newest = r.synced_at;
   }
-  const { data: profile, error } = await client.from('profiles').select('display_name, updated_at').eq('id', uid).maybeSingle();
+  const { data: profile, error } = await client.from('profiles').select('display_name, updated_at, achievements').eq('id', uid).maybeSingle();
   if (error) throw error;
   if (!active()) return; // signed out while downloading
 
@@ -272,6 +295,13 @@ async function pull() {
   }
   if (profile && !outbox.profile && ms(profile.updated_at) > (ms(s.profile.updatedAt) ?? 0) && profile.display_name !== s.profile.name) {
     next.profile = { name: profile.display_name, updatedAt: profile.updated_at };
+    changed = true;
+  }
+  // Achievements from other devices are added, never removed.
+  const remote = profile?.achievements ?? {};
+  const missing = Object.keys(remote).filter((k) => !s.achievements[k]);
+  if (missing.length) {
+    next.achievements = { ...remote, ...s.achievements };
     changed = true;
   }
   if (changed) store.applyRemote(next);

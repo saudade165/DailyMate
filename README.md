@@ -64,8 +64,15 @@ Then open http://localhost:5174 (the address allowed by the server for developme
   Nothing typed there is sent anywhere. See `supabase/README.md`.
 - **Profile & Subscription** — account and sync status, display name, plan
   comparison (information only), backup download and restore.
-- Progress and Goals still show an honest "Coming soon" page (the database already
-  has a `goals` table).
+- **Progress** (`#/progress`) — completion rate, completed vs. planned tasks, current and
+  best streak, completed-per-day chart (per week for all time), comparison with the
+  previous period, goals summary, achievements. Ranges: Today, 7 days, 30 days, All time.
+  Counting rules are in `js/progress.js` and shown on the page.
+- **Goals** (`#/goals`) — complete N tasks (optionally by priority), be productive on N days,
+  keep a daily or weekly streak, finish a list, or a custom goal updated by hand. Start date,
+  optional deadline, pause/resume, edit, delete with Undo, filters and sorting. Progress is
+  calculated from real tasks; a goal completes automatically when reached and keeps the
+  progress it reached. Goals and achievements sync between devices.
 
 ### Reminder alerts — what works and what doesn't
 

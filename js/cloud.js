@@ -6,7 +6,7 @@
 // comes back with ?code=… which is exchanged here for a session. The hash part of
 // the address stays free for the app's own routes.
 
-import { SUPABASE_CONFIG } from './config.js';
+import { APP_URLS, SUPABASE_CONFIG } from './config.js';
 
 const SESSION_KEY = 'dailymate.auth';
 const LIBRARY = 'js/vendor/supabase-2.117.2.js';
@@ -34,8 +34,11 @@ const hasStoredSession = () => {
   try { return Boolean(localStorage.getItem(SESSION_KEY)); } catch { return false; }
 };
 
-/** The address sign-in links should come back to (this page, without query or hash). */
-export const appUrl = () => `${location.origin}${location.pathname}`;
+/** The address sign-in links come back to: this page if it's a known DailyMate address, otherwise production. */
+export function appUrl() {
+  const here = `${location.origin}${location.pathname.replace(/index\.html$/, '')}`;
+  return [APP_URLS.production, ...APP_URLS.development].includes(here) ? here : APP_URLS.production;
+}
 
 function loadLibrary() {
   if (window.supabase?.createClient) return Promise.resolve(window.supabase);
@@ -65,36 +68,67 @@ export function getClient() {
 
 const toUser = (u) => ({ id: u.id, email: u.email ?? '', confirmed: Boolean(u.email_confirmed_at), createdAt: u.created_at });
 
+const LINK_PARAMS = ['code', 'token_hash', 'type', 'flow', 'error', 'error_code', 'error_description'];
+const OTP_TYPES = ['signup', 'email', 'recovery', 'email_change', 'invite', 'magiclink'];
+
+function linkParams() {
+  const query = new URLSearchParams(location.search);
+  const rawHash = location.hash.replace(/^#\/?/, '');
+  const hash = new URLSearchParams(rawHash.includes('=') ? rawHash : '');
+  const get = (k) => query.get(k) ?? hash.get(k);
+  return Object.fromEntries(LINK_PARAMS.map((k) => [k, get(k)]));
+}
+
+export const hasPendingLink = () => {
+  const p = linkParams();
+  return Boolean(p.code || p.token_hash || p.error || p.error_description);
+};
+
 /**
- * Reads ?code= / ?error= from a sign-in link. Returns what happened so the app can
- * show the right page: null | { kind: 'signed-in' | 'recovery' | 'confirmed-elsewhere' | 'link-error', message? }.
+ * Handles the address a link from a Supabase e-mail opened. Returns null (no link) or
+ * { kind, flow, reason?, detail? }:
+ *   kind: 'signed-in' | 'recovery' | 'confirmed-elsewhere' | 'link-error'
+ *   reason (link-error): 'expired' | 'other-browser' | 'invalid'
+ * Only internal pages are opened afterwards — nothing from the link decides where to go.
  */
 async function handleRedirect() {
-  const query = new URLSearchParams(location.search);
-  const hash = new URLSearchParams(location.hash.replace(/^#\/?/, '').includes('=') ? location.hash.slice(1) : '');
-  const code = query.get('code');
-  const error = query.get('error_description') || hash.get('error_description');
-  const flow = query.get('flow');
-  if (!code && !error) return null;
+  const p = linkParams();
+  if (!p.code && !p.token_hash && !p.error && !p.error_description) return null;
+  const flow = p.flow === 'recovery' || p.type === 'recovery' ? 'recovery' : 'signup';
 
-  // Clean the address right away so a reload doesn't reuse the link.
-  history.replaceState(null, '', `${location.pathname}${location.hash && !location.hash.includes('=') ? location.hash : '#/my-day'}`);
-  if (error) return { kind: 'link-error', message: error };
+  // Clean the address right away so a reload or a shared screenshot doesn't reuse the link.
+  const keepHash = location.hash && !location.hash.includes('=') ? location.hash : '#/my-day';
+  history.replaceState(null, '', `${location.pathname}${keepHash}`);
+
+  if (p.error || p.error_description) {
+    const expired = p.error_code === 'otp_expired' || /expired|invalid/i.test(p.error_description ?? '');
+    return { kind: 'link-error', flow, reason: expired ? 'expired' : 'invalid', detail: p.error_description ?? p.error };
+  }
 
   const client = await getClient();
-  const { error: exchangeError } = await client.auth.exchangeCodeForSession(code);
-  if (exchangeError) {
-    // Opened in a different browser than the one that asked for the link: the email
-    // is confirmed, but this browser can't finish signing in.
-    return flow === 'recovery' ? { kind: 'link-error', message: exchangeError.message } : { kind: 'confirmed-elsewhere' };
+  if (p.token_hash) {
+    // Links built from {{ .TokenHash }} work in any browser (no PKCE verifier needed).
+    if (!OTP_TYPES.includes(p.type) || !/^[A-Za-z0-9_-]{8,200}$/.test(p.token_hash)) return { kind: 'link-error', flow, reason: 'invalid' };
+    const { error } = await client.auth.verifyOtp({ token_hash: p.token_hash, type: p.type });
+    if (error) return { kind: 'link-error', flow, reason: /expired|invalid|not found/i.test(error.message) ? 'expired' : 'invalid', detail: error.message };
+    return { kind: flow === 'recovery' ? 'recovery' : 'signed-in', flow };
   }
-  return { kind: flow === 'recovery' ? 'recovery' : 'signed-in' };
+
+  if (!/^[A-Za-z0-9-]{8,200}$/.test(p.code)) return { kind: 'link-error', flow, reason: 'invalid' };
+  const { error } = await client.auth.exchangeCodeForSession(p.code);
+  if (error) {
+    // Supabase only sends a code after the e-mail was verified. If this browser can't use it
+    // (opened elsewhere, or used already), the confirmation itself still succeeded.
+    if (flow === 'signup') return { kind: 'confirmed-elsewhere', flow, detail: error.message };
+    return { kind: 'link-error', flow, reason: 'other-browser', detail: error.message };
+  }
+  return { kind: flow === 'recovery' ? 'recovery' : 'signed-in', flow };
 }
 
 /** Starts auth: restores a saved session and handles sign-in links. */
 export async function start() {
   if (!isConfigured()) return null;
-  const pendingLink = /[?&](code|error_description)=/.test(location.search) || location.hash.includes('error_description=');
+  const pendingLink = hasPendingLink();
   if (!hasStoredSession() && !pendingLink) return null;
   setState({ status: 'loading', user: null });
   try {
@@ -131,7 +165,7 @@ export function explain(error) {
 export async function signUp(email, password, name = '') {
   const client = await getClient();
   const { data, error } = await client.auth.signUp({
-    email, password, options: { emailRedirectTo: appUrl(), data: name ? { display_name: name } : {} },
+    email, password, options: { emailRedirectTo: `${appUrl()}?flow=signup`, data: name ? { display_name: name } : {} },
   });
   if (error) throw error;
   // With email confirmation on there is no session yet. (For an email that already has an
@@ -147,7 +181,7 @@ export async function signIn(email, password) {
 
 export async function resendConfirmation(email) {
   const client = await getClient();
-  const { error } = await client.auth.resend({ type: 'signup', email, options: { emailRedirectTo: appUrl() } });
+  const { error } = await client.auth.resend({ type: 'signup', email, options: { emailRedirectTo: `${appUrl()}?flow=signup` } });
   if (error) throw error;
 }
 

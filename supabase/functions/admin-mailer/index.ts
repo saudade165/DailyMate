@@ -14,6 +14,10 @@
 //
 // No duplicates: the queue has one row per account (unique key), a row is claimed by one
 // run at a time, and Resend gets an Idempotency-Key so a retry after a crash isn't sent twice.
+//
+// Delivery: "sent" only means Resend accepted the e-mail. Each run also asks Resend for the
+// latest event of recently sent e-mails (delivered, bounced, …) and stores it for the admin page.
+// That needs an API key with "Full access"; with a "Sending access" key the status is "unavailable".
 
 import { createClient } from "npm:@supabase/supabase-js@2.117.2";
 
@@ -132,6 +136,29 @@ async function processQueue(onlyTest = false) {
   return { configured, ...counts };
 }
 
+/** Stores Resend's latest delivery event for e-mails sent in the last 3 days (checked every 5 minutes). */
+async function refreshDelivery() {
+  const key = Deno.env.get("RESEND_API_KEY");
+  if (!key) return;
+  const { data, error } = await db.rpc("admin_mail_delivery_pending", { p_limit: 20 });
+  if (error) { console.error("admin_mail_delivery_pending failed", error.message); return; }
+  for (const row of (data ?? []) as { id: number; provider_id: string }[]) {
+    let status = "unknown";
+    try {
+      const res = await fetch(`https://api.resend.com/emails/${encodeURIComponent(row.provider_id)}`, {
+        headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(10_000),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) status = String(body?.last_event ?? "unknown");
+      else if (res.status === 401 || res.status === 403) status = "unavailable";
+      else continue; // try again on the next run
+    } catch {
+      continue;
+    }
+    await db.rpc("admin_mail_set_delivery", { p_id: row.id, p_status: status });
+  }
+}
+
 function cors(origin: string | null): HeadersInit {
   return {
     "Access-Control-Allow-Origin": origin && ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0],
@@ -162,7 +189,9 @@ Deno.serve(async (req) => {
       let diff = secret.length ^ expected.length;
       for (let i = 0; i < Math.min(secret.length, expected.length); i++) diff |= secret.charCodeAt(i) ^ expected.charCodeAt(i);
       if (!expected || diff !== 0) return json({ error: "unauthorized" }, 401);
-      return json({ ok: true, ...(await processQueue()) });
+      const result = await processQueue();
+      await refreshDelivery();
+      return json({ ok: true, ...result });
     }
 
     if (body.action === "test") {

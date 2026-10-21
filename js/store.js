@@ -27,7 +27,7 @@ const listeners = new Set();
 let changeHook = null; // (previous state, next state) => void — called for the person's own changes
 
 function emptyState() {
-  return { owner: null, tasks: [], lists: [], reminders: [], profile: { name: '', updatedAt: null } };
+  return { owner: null, tasks: [], lists: [], reminders: [], goals: [], achievements: {}, profile: { name: '', updatedAt: null } };
 }
 
 function newId() {
@@ -107,6 +107,50 @@ function normalizeReminder(raw) {
   };
 }
 
+const GOAL_KINDS = ['tasks', 'active_days', 'streak', 'list', 'custom'];
+const GOAL_STATUSES = ['active', 'paused', 'completed'];
+const GOAL_TARGET_MAX = 10000;
+const intIn = (v, min, max, fallback) => (Number.isInteger(v) && v >= min && v <= max ? v : fallback);
+
+function normalizeGoal(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const title = typeof raw.title === 'string' ? raw.title.trim().slice(0, TITLE_MAX) : '';
+  if (!title) return null;
+  const kind = GOAL_KINDS.includes(raw.kind) ? raw.kind : 'custom';
+  const startDate = isValidISO(raw.startDate) ? raw.startDate : (typeof raw.createdAt === 'string' ? raw.createdAt.slice(0, 10) : todayISO());
+  const deadline = isValidISO(raw.deadline) && raw.deadline >= startDate ? raw.deadline : null;
+  const status = GOAL_STATUSES.includes(raw.status) ? raw.status : 'active';
+  return {
+    id: typeof raw.id === 'string' && raw.id ? raw.id : newId(),
+    title,
+    notes: str(raw.notes, NOTES_MAX),
+    kind,
+    target: intIn(raw.target, 1, GOAL_TARGET_MAX, 1),
+    startDate: isValidISO(startDate) ? startDate : todayISO(),
+    deadline,
+    status,
+    priority: ['any', 'high', 'medium', 'low'].includes(raw.priority) ? raw.priority : 'any',
+    period: raw.period === 'week' ? 'week' : 'day',
+    listId: typeof raw.listId === 'string' && raw.listId ? raw.listId.slice(0, 64) : null,
+    manualProgress: intIn(raw.manualProgress, 0, GOAL_TARGET_MAX, 0),
+    // The progress reached when the goal was completed, so later edits to tasks don't change it.
+    achieved: status === 'completed' && Number.isInteger(raw.achieved) && raw.achieved >= 0 ? raw.achieved : null,
+    completedAt: status === 'completed' && typeof raw.completedAt === 'string' ? raw.completedAt : null,
+    createdAt: stamp(raw.createdAt),
+    updatedAt: stamp(raw.updatedAt),
+  };
+}
+
+/** { achievementId: ISO date earned } — only well-formed entries. */
+function normalizeAchievements(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const [k, v] of Object.entries(raw)) {
+    if (/^[a-z0-9_]{1,40}$/.test(k) && typeof v === 'string' && !Number.isNaN(Date.parse(v))) out[k] = v;
+  }
+  return out;
+}
+
 function normalizeState(data) {
   const arr = (v, fn) => (Array.isArray(v) ? v.map(fn).filter(Boolean) : []);
   return {
@@ -114,6 +158,8 @@ function normalizeState(data) {
     tasks: arr(data.tasks, normalizeTask),
     lists: arr(data.lists, normalizeList).slice(0, LISTS_MAX),
     reminders: arr(data.reminders, normalizeReminder),
+    goals: arr(data.goals, normalizeGoal).slice(0, 200),
+    achievements: normalizeAchievements(data.achievements),
     profile: {
       name: typeof data.profile?.name === 'string' ? data.profile.name.slice(0, NAME_MAX) : '',
       updatedAt: typeof data.profile?.updatedAt === 'string' ? data.profile.updatedAt : null,
@@ -464,6 +510,98 @@ export function deleteReminder(id) {
   return r;
 }
 
+// ---- Goals --------------------------------------------------------------------
+
+export const getGoals = () => state.goals;
+export const getGoal = (id) => state.goals.find((g) => g.id === id) ?? null;
+export const GOAL_LIMITS = { TARGET_MAX: GOAL_TARGET_MAX, GOALS_MAX: 200 };
+
+/** Validates goal form data. Returns { goal } or { errors } keyed by field. */
+export function validateGoal(input) {
+  const errors = {};
+  const title = (input.title ?? '').trim();
+  if (!title) errors.title = 'Please give the goal a short name.';
+  else if (title.length > TITLE_MAX) errors.title = `Please keep it under ${TITLE_MAX} characters.`;
+  const kind = GOAL_KINDS.includes(input.kind) ? input.kind : null;
+  if (!kind) errors.kind = 'Please choose what kind of goal this is.';
+  const target = Number(input.target);
+  if (kind !== 'list' && (!Number.isInteger(target) || target < 1 || target > GOAL_TARGET_MAX)) {
+    errors.target = `Please enter a whole number from 1 to ${GOAL_TARGET_MAX.toLocaleString('en-US')}.`;
+  }
+  if (kind === 'list' && !getList(input.listId)) errors.listId = 'Please choose a list.';
+  if (!isValidISO(input.startDate)) errors.startDate = 'Please choose a start date.';
+  if (input.deadline && !isValidISO(input.deadline)) errors.deadline = 'Please enter a valid date.';
+  else if (input.deadline && isValidISO(input.startDate) && input.deadline < input.startDate) errors.deadline = 'The deadline can’t be before the start date.';
+  if (Object.keys(errors).length) return { errors };
+  return {
+    goal: {
+      title,
+      notes: (input.notes ?? '').trim().slice(0, NOTES_MAX),
+      kind,
+      target: kind === 'list' ? 1 : target,
+      startDate: input.startDate,
+      deadline: input.deadline || null,
+      priority: kind === 'tasks' && ['high', 'medium', 'low'].includes(input.priority) ? input.priority : 'any',
+      period: kind === 'streak' && input.period === 'week' ? 'week' : 'day',
+      listId: kind === 'list' ? input.listId : null,
+    },
+  };
+}
+
+export function addGoal(input) {
+  if (state.goals.length >= 200) throw new Error('Too many goals');
+  const now = new Date().toISOString();
+  const goal = normalizeGoal({ ...input, id: newId(), status: 'active', manualProgress: 0, createdAt: now, updatedAt: now });
+  if (!goal) throw new Error('Invalid goal');
+  state = { ...state, goals: [...state.goals, goal] };
+  commit();
+  return goal;
+}
+
+export function updateGoal(id, patch) {
+  const current = getGoal(id);
+  if (!current) throw new Error('Goal not found');
+  const next = normalizeGoal({ ...current, ...patch, id, updatedAt: new Date().toISOString() });
+  if (!next) throw new Error('Invalid goal');
+  state = { ...state, goals: state.goals.map((g) => (g.id === id ? next : g)) };
+  commit();
+  return next;
+}
+
+/** Marks a goal reached, keeping the progress it had at that moment. */
+export const completeGoal = (id, achieved) =>
+  updateGoal(id, { status: 'completed', achieved: Math.max(0, Math.round(achieved)), completedAt: new Date().toISOString() });
+export const reopenGoal = (id) => updateGoal(id, { status: 'active', achieved: null, completedAt: null });
+
+export function deleteGoal(id) {
+  const goal = getGoal(id);
+  if (!goal) return null;
+  state = { ...state, goals: state.goals.filter((g) => g.id !== id) };
+  commit();
+  return goal;
+}
+
+export function restoreGoal(goal) {
+  const clean = normalizeGoal(goal);
+  if (!clean || getGoal(clean.id)) return;
+  state = { ...state, goals: [...state.goals, { ...clean, updatedAt: new Date().toISOString() }] };
+  commit();
+}
+
+// ---- Achievements -------------------------------------------------------------
+// Earned once and kept, even if the tasks that earned them are deleted later.
+
+export const getAchievements = () => state.achievements;
+
+/** Adds achievements that aren't recorded yet. `earned` = { id: ISO date }. Returns the ids that were new. */
+export function addAchievements(earned) {
+  const fresh = Object.entries(normalizeAchievements(earned)).filter(([k]) => !state.achievements[k]);
+  if (!fresh.length) return [];
+  state = { ...state, achievements: { ...state.achievements, ...Object.fromEntries(fresh) } };
+  commit();
+  return fresh.map(([k]) => k);
+}
+
 // ---- Backup -------------------------------------------------------------------
 
 export function exportData() {
@@ -475,9 +613,10 @@ export function exportData() {
 export function importData(data) {
   if (!data || typeof data !== 'object' || !Array.isArray(data.tasks)) throw new Error('Not a DailyMate backup');
   // A backup never changes whose account this is.
-  state = normalizeState({ ...data, owner: state.owner });
+  // Achievements already earned are kept.
+  state = normalizeState({ ...data, owner: state.owner, achievements: { ...(data.achievements ?? {}), ...state.achievements } });
   commit();
-  return { tasks: state.tasks.length, lists: state.lists.length, reminders: state.reminders.length };
+  return { tasks: state.tasks.length, lists: state.lists.length, reminders: state.reminders.length, goals: state.goals.length };
 }
 
 // ---- Sync support (used by js/sync.js) -------------------------------------------
@@ -485,7 +624,7 @@ export function importData(data) {
 /** The whole current state (treat as read-only). */
 export const getState = () => state;
 export const getOwner = () => state.owner;
-export const hasData = () => state.tasks.length + state.lists.length + state.reminders.length > 0 || !!state.profile.name;
+export const hasData = () => state.tasks.length + state.lists.length + state.reminders.length + state.goals.length > 0 || !!state.profile.name;
 
 /** `fn(previous, next)` runs after each change the person makes (not for applyRemote). */
 export function setChangeHook(fn) {

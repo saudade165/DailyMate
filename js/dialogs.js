@@ -310,6 +310,107 @@ listForm.addEventListener('submit', (e) => {
   }
 });
 
+// ---- Goal -------------------------------------------------------------------
+
+const goalDialog = document.getElementById('goal-dialog');
+const goalForm = document.getElementById('goal-form');
+// Right after an update, a browser can briefly combine a cached old index.html with new
+// scripts. Then the goal form is missing: don't break the whole app, ask for a reload.
+const goalFormReady = Boolean(goalDialog && goalForm);
+const setGoalError = goalFormReady ? errorSetter('goal', goalForm) : () => {};
+let editingGoalId = null;
+let goalReturnFocus = null;
+
+const GOAL_HINTS = {
+  tasks: 'Counts tasks you tick off between the start date and the deadline.',
+  active_days: 'Counts days on which you tick off at least one task.',
+  streak: 'Your longest run in a row with at least one completed task, counted from the start date.',
+  list: 'Done when every item on the list is ticked off.',
+  custom: 'You add progress yourself with the + button on the goal.',
+};
+const TARGET_LABELS = { tasks: 'Number of tasks', active_days: 'Number of days', streak: 'Length of the streak', custom: 'Number of steps' };
+
+function syncGoalFields() {
+  const kind = goalForm.elements.kind.value;
+  document.getElementById('goal-kind-hint').textContent = GOAL_HINTS[kind] ?? '';
+  const show = { target: kind !== 'list', priority: kind === 'tasks', period: kind === 'streak', list: kind === 'list' };
+  goalForm.querySelectorAll('[data-goal-field]').forEach((el) => { el.hidden = !show[el.dataset.goalField]; });
+  document.getElementById('goal-target-label').textContent = TARGET_LABELS[kind] ?? 'Target';
+}
+if (goalFormReady) goalForm.elements.kind.addEventListener('change', syncGoalFields);
+
+/**
+ * Opens the goal form. Pass `goal` to edit, or `draft` ({ title, kind, target, … }) to prefill a new goal.
+ */
+export function openGoalDialog({ goal = null, draft = null } = {}) {
+  if (!goalFormReady) { toast('DailyMate was just updated. Please reload the page.', { tone: 'error' }); return; }
+  editingGoalId = goal?.id ?? null;
+  goalReturnFocus = document.activeElement;
+  goalForm.reset();
+  ['title', 'kind', 'target', 'listId', 'startDate', 'deadline'].forEach((f) => setGoalError(f));
+  const lists = store.getLists();
+  const listSelect = goalForm.elements.listId;
+  listSelect.innerHTML = lists.length
+    ? lists.map((l) => `<option value="${esc(l.id)}">${esc(l.name)} (${l.items.filter((i) => i.done).length}/${l.items.length})</option>`).join('')
+    : '<option value="">You don’t have any lists yet</option>';
+  const src = goal ?? draft ?? {};
+  const f = goalForm.elements;
+  f.title.value = src.title ?? '';
+  f.kind.value = src.kind ?? 'tasks';
+  f.target.value = src.target ?? (src.kind === 'streak' ? 7 : 10);
+  f.priority.value = src.priority ?? 'any';
+  f.period.value = src.period ?? 'day';
+  if (src.listId) f.listId.value = src.listId;
+  f.startDate.value = src.startDate ?? todayISO();
+  f.deadline.value = src.deadline ?? '';
+  f.notes.value = src.notes ?? '';
+  f.kind.disabled = Boolean(goal); // the kind of an existing goal can't change: its progress means something else
+  document.getElementById('goal-dialog-title').textContent = goal ? 'Edit goal' : 'New goal';
+  document.getElementById('goal-submit').textContent = goal ? 'Save changes' : 'Create goal';
+  syncGoalFields();
+  goalDialog.showModal();
+  f.title.focus();
+}
+
+function closeGoalDialog() {
+  goalDialog.close();
+  editingGoalId = null;
+  goalReturnFocus?.isConnected && goalReturnFocus.focus();
+}
+if (goalFormReady) wireDialog(goalDialog, closeGoalDialog);
+
+goalForm?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const f = goalForm.elements;
+  const editing = editingGoalId ? store.getGoal(editingGoalId) : null;
+  const input = {
+    title: f.title.value, notes: f.notes.value, kind: editing?.kind ?? f.kind.value, target: f.target.value,
+    priority: f.priority.value, period: f.period.value, listId: f.listId.value, startDate: f.startDate.value, deadline: f.deadline.value,
+  };
+  const { goal, errors } = store.validateGoal(input);
+  ['title', 'kind', 'target', 'listId', 'startDate', 'deadline'].forEach((name) => setGoalError(name, errors?.[name]));
+  if (errors) {
+    const first = ['title', 'kind', 'target', 'listId', 'startDate', 'deadline'].find((n) => errors[n]);
+    f[first]?.focus();
+    return;
+  }
+  try {
+    if (editing) {
+      // A completed goal whose target was raised past what it reached becomes active again.
+      const reopen = editing.status === 'completed' && goal.target > (editing.achieved ?? 0) && goal.kind !== 'list';
+      store.updateGoal(editing.id, { ...goal, ...(reopen ? { status: 'active', achieved: null, completedAt: null } : {}) });
+      toast(reopen ? 'Goal updated and active again' : 'Goal updated');
+    } else {
+      store.addGoal(goal);
+      toast('Goal created');
+    }
+    closeGoalDialog();
+  } catch (err) {
+    console.error(err);
+    toast(err.message === 'Too many goals' ? 'You can have up to 200 goals.' : 'Something went wrong. Please try again.', { tone: 'error' });
+  }
+});
+
 // ---- Confirm ---------------------------------------------------------------
 
 const confirmDialog = document.getElementById('confirm-dialog');

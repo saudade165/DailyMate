@@ -7,16 +7,8 @@ export const ROUTES = [
   { id: 'ai-assistant', label: 'AI Assistant', icon: 'sparkle', ready: true, plus: true },
   { id: 'lists', label: 'Lists', icon: 'list', ready: true },
   { id: 'reminders', label: 'Reminders', icon: 'bell', ready: true },
-  {
-    id: 'progress', label: 'Progress', icon: 'chart', ready: false,
-    blurb: 'See how many tasks you finish each week and celebrate your streaks.',
-    meanwhile: 'Your progress for each day is shown at the top of My Day.',
-  },
-  {
-    id: 'goals', label: 'Goals', icon: 'target', ready: false,
-    blurb: 'Set bigger goals and break them into small, doable steps.',
-    meanwhile: 'You can already add the first step of a goal as a task in My Day.',
-  },
+  { id: 'progress', label: 'Progress', icon: 'chart', ready: true },
+  { id: 'goals', label: 'Goals', icon: 'target', ready: true },
   { id: 'profile', label: 'Profile & Subscription', icon: 'user', ready: true },
   // Reached from Profile, the footer and links — not shown in the menu.
   { id: 'account', label: 'Account', icon: 'user', ready: true, hidden: true },

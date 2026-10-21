@@ -267,6 +267,93 @@
     </form>
   </dialog>
 
+  <!-- New / edit goal -->
+  <dialog class="dialog" id="goal-dialog" aria-labelledby="goal-dialog-title">
+    <form method="dialog" class="dialog__form" id="goal-form" novalidate>
+      <div class="dialog__header">
+        <h2 class="dialog__title" id="goal-dialog-title">New goal</h2>
+        <button class="icon-btn" type="button" data-action="dialog-cancel" aria-label="Close">
+          <svg aria-hidden="true"><use href="#i-close"/></svg>
+        </button>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="goal-title">Goal</label>
+        <input class="input" id="goal-title" name="title" type="text" maxlength="200" required
+               placeholder="e.g. Finish 20 tasks this month" aria-describedby="goal-title-error">
+        <p class="field__error" id="goal-title-error" hidden></p>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="goal-kind">How it’s measured</label>
+        <select class="input select" id="goal-kind" name="kind" aria-describedby="goal-kind-hint goal-kind-error">
+          <option value="tasks">Complete a number of tasks</option>
+          <option value="active_days">Be productive on a number of days</option>
+          <option value="streak">Keep a streak</option>
+          <option value="list">Finish one of my lists</option>
+          <option value="custom">Custom — I’ll update it myself</option>
+        </select>
+        <p class="field__hint" id="goal-kind-hint"></p>
+        <p class="field__error" id="goal-kind-error" hidden></p>
+      </div>
+
+      <div class="field-row">
+        <div class="field" data-goal-field="target">
+          <label class="field__label" for="goal-target" id="goal-target-label">Target</label>
+          <input class="input" id="goal-target" name="target" type="number" min="1" max="10000" step="1" inputmode="numeric"
+                 required aria-describedby="goal-target-error">
+          <p class="field__error" id="goal-target-error" hidden></p>
+        </div>
+        <div class="field" data-goal-field="priority">
+          <label class="field__label" for="goal-priority">Which tasks</label>
+          <select class="input select" id="goal-priority" name="priority">
+            <option value="any">Any task</option>
+            <option value="high">High priority only</option>
+            <option value="medium">Medium priority only</option>
+            <option value="low">Low priority only</option>
+          </select>
+        </div>
+        <div class="field" data-goal-field="period">
+          <label class="field__label" for="goal-period">Streak of</label>
+          <select class="input select" id="goal-period" name="period">
+            <option value="day">Days in a row</option>
+            <option value="week">Weeks in a row</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field" data-goal-field="list">
+        <label class="field__label" for="goal-list">List</label>
+        <select class="input select" id="goal-list" name="listId" aria-describedby="goal-listId-error"></select>
+        <p class="field__error" id="goal-listId-error" hidden></p>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label class="field__label" for="goal-start">Start date</label>
+          <input class="input" id="goal-start" name="startDate" type="date" required aria-describedby="goal-startDate-error">
+          <p class="field__error" id="goal-startDate-error" hidden></p>
+        </div>
+        <div class="field">
+          <label class="field__label" for="goal-deadline">Deadline <span class="field__optional">(optional)</span></label>
+          <input class="input" id="goal-deadline" name="deadline" type="date" aria-describedby="goal-deadline-error">
+          <p class="field__error" id="goal-deadline-error" hidden></p>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="field__label" for="goal-notes">Why it matters <span class="field__optional">(optional)</span></label>
+        <textarea class="input textarea" id="goal-notes" name="notes" rows="2" maxlength="1000"
+                  placeholder="A few words to keep you motivated"></textarea>
+      </div>
+
+      <div class="dialog__actions">
+        <button class="btn btn--ghost" type="button" data-action="dialog-cancel">Cancel</button>
+        <button class="btn btn--primary" type="submit" id="goal-submit">Create goal</button>
+      </div>
+    </form>
+  </dialog>
+
   <!-- Confirmation -->
   <dialog class="dialog dialog--small" id="confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
     <form method="dialog" class="dialog__form">

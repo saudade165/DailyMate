@@ -146,6 +146,7 @@ const STORAGE_ROWS = [
   ['dailymate.outbox, dailymate.sync', 'Local storage', 'Changes waiting to be uploaded, and when this device last synced (only if you sign in).', 'Until you sign out'],
   ['dailymate.push', 'Local storage', 'Remembers that this browser has notifications on (only if you turn them on).', 'Until you turn them off'],
   ['dailymate.ai.chat', 'Session storage', 'The AI Assistant conversation on this tab.', 'Until you close the tab'],
+  ['dailymate.progressRange, dailymate.returnTo', 'Session storage', 'The time range you picked on Progress, and the page to return to after signing in.', 'Until you close the tab'],
   ['dailymate-app-v1', 'Cache storage', 'A copy of the app’s own files so DailyMate opens without a connection.', 'Replaced on updates'],
 ];
 

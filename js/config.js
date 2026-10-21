@@ -9,6 +9,14 @@ export const SUPABASE_CONFIG = {
   publishableKey: 'sb_publishable_MwijWPPb8ihrgRQ0GM1oVA_dQy3cgtW',
 };
 
+// Where links in sign-up and password e-mails may return to. Anything else falls back to
+// production, so a link can never send someone to an address taken from the URL.
+// Each address must also be listed in Supabase → Authentication → URL Configuration.
+export const APP_URLS = {
+  production: 'https://saudade165.github.io/DailyMate/',
+  development: ['http://localhost:5174/', 'http://127.0.0.1:5174/'],
+};
+
 export const AI_CONFIG = {
   // HTTPS address of the DailyMate AI server function
   // (e.g. https://<project>.supabase.co/functions/v1/ai-assistant).

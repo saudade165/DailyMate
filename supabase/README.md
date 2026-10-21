@@ -30,6 +30,8 @@ Row Level Security allows the signed-in person. Secret keys exist only inside Su
 | `20261020130000_scheduled_jobs.sql` | pg_cron: push dispatch every minute (only calls the function when there is work), daily cleanup |
 | `20261021100000_owner_admin.sql` | Owner-only admin (`is_admin()` = confirmed, not blocked, address = `owner_email` setting), blocking (also enforced in RLS), activity days, sign-up name → profile, new-registration e-mail queue + trigger, admin dashboard/users/detail/block/delete/export/e-mail functions, `dailymate-admin-mail` cron job; drops the unused `app_admins` table |
 | `20261021110000_admin_not_found_404.sql` | "account not found" answers HTTP 404 instead of 500 |
+| `20261022100000_goals_achievements_delivery.sql` | Extends the existing `goals` table (kind, target, start date, status, priority filter, streak period, list, manual progress, achieved snapshot); `profiles.achievements` + `merge_achievements()` (server-side union, never removes); Resend delivery status for admin e-mails; goals in admin usage numbers |
+| `20261022101000_delivery_unavailable.sql` | "unavailable" (send-only API key) counts as a final delivery state |
 
 Data rules enforced by the database (tested):
 - Each person can read and change only their own rows. Nobody can hard-delete, change their plan, or make themselves admin from the browser.
@@ -102,19 +104,42 @@ changing e-mail settings are written to `admin_audit_log`.
    `MAIL_FROM` = `DailyMate <notify@your-domain>`.
 5. Admin panel → E-mails → **Send a test e-mail**. Free Resend plan: 3,000 e-mails/month, 100/day.
 
+"Sent" means Resend accepted the e-mail. The function then asks Resend what happened (delivered,
+bounced, …) every few minutes for 3 days and shows it in the **Delivery** column. Reading that status
+needs an API key with **Full access**; with a "Sending access" key it shows "unknown". Mail from the
+shared `onboarding@resend.dev` sender often lands in Gmail's **Spam** or **Promotions** — mark it
+"Not spam" once, or verify your own domain in Resend and set `MAIL_FROM`.
+
 ## Dashboard settings still needed (cannot be set from the repository)
 
-1. **Authentication → URL Configuration**
-   - Site URL: `https://saudade165.github.io/DailyMate/`
-   - Redirect URLs: `https://saudade165.github.io/DailyMate/**` (and `http://localhost:5174/**` for development)
-   Without this, links in confirmation and password-reset emails point to `localhost:3000`.
-2. **Authentication → Emails → SMTP Settings: set up a custom SMTP provider.** The built-in sender only
-   delivers to members of the Supabase organization and is limited to a few emails per hour, so regular
-   people can't confirm their accounts until this is done. Low-cost options: Resend, Brevo, Amazon SES,
-   Postmark (most have a free tier). Values needed: host, port, username, password, sender address/name.
-3. **Authentication → Providers → Email:** keep "Confirm email" on. Set the minimum password length to 8.
-4. **Authentication → Attack Protection:** turn on leaked-password protection if your plan includes it.
-5. Optional: customise the email templates (Authentication → Emails → Templates) with DailyMate wording.
+### 1. Fix e-mail links that open `localhost:3000` (required)
+
+Supabase only sends people back to an address that is on its allow list; anything else falls back
+to the **Site URL**, which is still the default `http://localhost:3000`. The app already asks for
+`https://saudade165.github.io/DailyMate/?flow=signup` (sign-up) and `…?flow=recovery` (password reset).
+
+Supabase Dashboard → project **DailyMate** → **Authentication → URL Configuration**:
+- **Site URL:** `https://saudade165.github.io/DailyMate/` → Save
+- **Redirect URLs → Add URL:** `https://saudade165.github.io/DailyMate/**`
+- (for local development) **Add URL:** `http://localhost:5174/**`
+
+Keep **Authentication → Providers → Email → Confirm email** turned on.
+
+### 2. Optional: links that work in any browser
+
+The default e-mails use PKCE links, which can only sign someone in on the browser where they signed
+up (in another browser the app says the e-mail is confirmed and asks them to sign in). The app also
+supports links that work everywhere. Authentication → **Emails → Templates**:
+- **Confirm signup**: replace the link with
+  `<a href="https://saudade165.github.io/DailyMate/?token_hash={{ .TokenHash }}&type=email&flow=signup">Confirm your e-mail</a>`
+- **Reset password**: replace the link with
+  `<a href="https://saudade165.github.io/DailyMate/?token_hash={{ .TokenHash }}&type=recovery&flow=recovery">Choose a new password</a>`
+
+### 3. Other settings
+- **Authentication → Emails → SMTP Settings:** a custom SMTP provider (e.g. Resend SMTP) so sign-up and
+  password e-mails reach everyone (the built-in sender only reaches the organization's own members and is limited to a few per hour).
+- **Authentication → Providers → Email:** minimum password length 8.
+- **Authentication → Attack Protection:** leaked-password protection, if your plan includes it.
 
 ## AI Assistant (deferred)
 

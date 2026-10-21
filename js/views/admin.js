@@ -13,6 +13,7 @@ import * as cloud from '../cloud.js';
 import { SUPABASE_CONFIG } from '../config.js';
 import { addDays, todayISO } from '../dates.js';
 import { confirmAction } from '../dialogs.js';
+import { barChart as sharedBarChart } from '../charts.js';
 import { esc, icon, toast } from '../ui.js';
 
 export const title = 'Admin';
@@ -90,44 +91,12 @@ function rangeBar() {
     </form>`;
 }
 
-/** Bar chart of one daily series (a single series: the heading names it, no legend). */
+/** One daily series from the dashboard as a bar chart (shared component). */
 function barChart(series, key, label) {
-  if (!series.length) return '<p class="muted">No data for this range.</p>';
-  const max = Math.max(1, ...series.map((d) => Number(d[key])));
-  const W = 640; const H = 180; const top = 10; const bottom = 24; const left = 28;
-  const plotH = H - top - bottom;
-  const step = (W - left) / series.length;
-  const barW = Math.max(2, Math.min(28, step - 2)); // 2px gap between bars
-  const ticks = max <= 4 ? Array.from({ length: max + 1 }, (_, i) => i) : [0, Math.round(max / 2), max];
-  const y = (v) => top + plotH - (v / max) * plotH;
-  const labelEvery = Math.ceil(series.length / 6);
-  const bars = series.map((d, i) => {
-    const v = Number(d[key]);
-    const x = left + i * step + (step - barW) / 2;
-    const h = (v / max) * plotH;
-    const r = Math.min(4, barW / 2, h);
-    const path = v > 0
-      ? `M${x},${top + plotH} v${-(h - r)} q0,${-r} ${r},${-r} h${barW - 2 * r} q${r},0 ${r},${r} v${h - r} z` : '';
-    const tip = `${day(d.day)}: ${num(v)} ${label}`;
-    return `<g class="chart__col" data-tip="${esc(tip)}">
-      <rect x="${left + i * step}" y="${top}" width="${step}" height="${plotH}" fill="transparent"></rect>
-      ${path ? `<path class="chart__bar" d="${path}"></path>` : ''}
-      ${i % labelEvery === 0 || i === series.length - 1 ? `<text class="chart__x" x="${x + barW / 2}" y="${H - 6}" text-anchor="middle">${esc(day(d.day))}</text>` : ''}
-    </g>`;
-  }).join('');
-  return `
-    <div class="chart" data-chart>
-      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)} per day, ${esc(day(series[0].day))} to ${esc(day(series.at(-1).day))}">
-        ${ticks.map((t) => `<line class="chart__grid" x1="${left}" x2="${W}" y1="${y(t)}" y2="${y(t)}"></line>
-          <text class="chart__y" x="${left - 6}" y="${y(t) + 4}" text-anchor="end">${t}</text>`).join('')}
-        ${bars}
-      </svg>
-      <div class="chart__tip" hidden></div>
-    </div>
-    <details class="details"><summary>Show as a table</summary>
-      <div class="table-wrap"><table class="table"><thead><tr><th scope="col">Day</th><th scope="col">${esc(label)}</th></tr></thead>
-      <tbody>${series.map((d) => `<tr><td>${esc(day(d.day))}</td><td>${num(d[key])}</td></tr>`).join('')}</tbody></table></div>
-    </details>`;
+  return sharedBarChart(series.map((d) => ({ label: day(d.day), value: Number(d[key]), tip: `${day(d.day)}: ${num(d[key])} ${label}` })), {
+    ariaLabel: series.length ? `${label} per day, ${day(series[0].day)} to ${day(series.at(-1).day)}` : label,
+    valueLabel: label[0].toUpperCase() + label.slice(1),
+  });
 }
 
 function table(headers, rows, empty) {
@@ -191,6 +160,19 @@ function overview(ctx) {
   })}`;
 }
 
+const DELIVERY = {
+  delivered: ['Delivered', 'ok'], opened: ['Delivered (opened)', 'ok'], clicked: ['Delivered (opened)', 'ok'],
+  sent: ['Handed to the mail server', 'wait'], delivery_delayed: ['Delayed — still trying', 'wait'], queued: ['Queued at Resend', 'wait'],
+  scheduled: ['Scheduled', 'wait'], bounced: ['Bounced — the address rejected it', 'bad'], complained: ['Marked as spam by the recipient', 'bad'],
+  failed: ['Failed', 'bad'], canceled: ['Cancelled', 'bad'], unavailable: ['Unknown — the API key can only send', 'wait'],
+};
+function deliveryText(r) {
+  if (r.status !== 'sent') return '—';
+  if (!r.delivery_status) return '<span class="muted">Checking…</span>';
+  const [text, tone] = DELIVERY[r.delivery_status] ?? [r.delivery_status, 'wait'];
+  return `<span class="${tone === 'bad' ? 'text-warn' : tone === 'ok' ? 'text-ok' : ''}">${esc(text)}</span>`;
+}
+
 const healthDot = (ok, unknown = false) => `<span class="health-dot ${unknown ? 'is-unknown' : ok ? 'is-ok' : 'is-bad'}" aria-hidden="true"></span>`;
 function mailerText(m, s) {
   if (s && s.enabled === false) return 'turned off';
@@ -222,6 +204,7 @@ function usage(ctx) {
           ['Tasks', num(g.tasks), num(g.usersWithTasks) + share(g.usersWithTasks)],
           ['Lists', num(g.lists), num(g.usersWithLists) + share(g.usersWithLists)],
           ['Reminders', num(g.reminders), num(g.usersWithReminders) + share(g.usersWithReminders)],
+          ['Goals', `${num(g.goals)} (${num(g.goalsCompleted)} completed)`, num(g.usersWithGoals) + share(g.usersWithGoals)],
           ['Repeating tasks and reminders', num(g.repeating), '—'],
           ['Push notifications', `${num(g.pushDevices)} devices`, num(g.usersWithPush) + share(g.usersWithPush)],
         ], '')}
@@ -364,9 +347,11 @@ function emailsPage(ctx) {
       </section>
       <section class="card" aria-labelledby="mlog-h">
         <h2 class="card__title" id="mlog-h">Recent e-mails</h2>
-        ${state(log, (rows) => table(['Created', 'Type', 'Account', 'Status', 'Tries', 'Error', ''], rows.map((r) => [
+        <p class="muted small">“Sent” means Resend accepted the e-mail. “Delivery” is what Resend reports afterwards (checked every few minutes for 3 days).</p>
+        ${state(log, (rows) => table(['Created', 'Type', 'Account', 'Status', 'Delivery', 'Tries', 'Error', ''], rows.map((r) => [
           esc(when(r.created_at)), r.kind === 'test' ? 'Test' : 'New user', esc(r.user_email ?? (r.kind === 'test' ? '' : 'deleted account')),
-          `${esc(r.status)}${r.sent_at ? `<br><span class="muted small">${esc(when(r.sent_at))}</span>` : ''}`, num(r.attempts), esc(r.last_error ?? ''),
+          `${esc(r.status)}${r.sent_at ? `<br><span class="muted small">${esc(when(r.sent_at))}</span>` : ''}`,
+          deliveryText(r), num(r.attempts), esc(r.last_error ?? ''),
           r.status === 'failed' ? `<button class="btn btn--outline btn--sm" type="button" data-action="retry-email" data-id="${r.id}">Retry</button>` : '',
         ]), 'No e-mails yet.'))}
       </section>`;
@@ -563,7 +548,7 @@ export async function onClick(e, ctx) {
       if (res.status === 429) throw fail('Too many test e-mails. Please wait an hour.');
       if (res.status === 403) throw fail('Only the owner account can send test e-mails.');
       if (!res.ok || !data.ok) throw fail(`The test e-mail couldn’t be sent${data.failed ? ' — see “Recent e-mails” for the reason' : ''}.`);
-    }, 'Test e-mail sent. Check the owner inbox (and spam folder).');
+    }, 'Resend accepted the test e-mail. It usually arrives within a minute — check Spam too. Its delivery status appears below within 5 minutes.');
   }
   if (a === 'retry-email') {
     act(ctx, async () => { await cloud.rpc('admin_retry_email', { p_id: Number(btn.dataset.id) }); invalidate('emails'); }, 'Queued again — it will be sent within a minute');
@@ -629,23 +614,6 @@ export function onSubmit(e, ctx) {
     default:
   }
 }
-
-// Chart tooltips (hover and keyboard focus).
-function showTip(e) {
-  const col = e.target.closest?.('[data-tip]');
-  const chart = e.target.closest?.('[data-chart]');
-  const tip = chart?.querySelector('.chart__tip');
-  if (!tip) return;
-  if (!col) { tip.hidden = true; return; }
-  const box = chart.getBoundingClientRect();
-  const r = col.getBoundingClientRect();
-  tip.textContent = col.dataset.tip;
-  tip.hidden = false;
-  const x = Math.min(Math.max(r.left + r.width / 2 - box.left, 60), box.width - 60);
-  tip.style.left = `${x}px`;
-}
-document.addEventListener('pointerover', (e) => { if (e.target.closest?.('[data-chart]')) showTip(e); });
-document.addEventListener('pointerleave', (e) => { if (e.target.matches?.('[data-chart]')) e.target.querySelector('.chart__tip').hidden = true; }, true);
 
 /** Leaving the admin page: loaded data is kept (Refresh reloads it); a redirect is forgotten. */
 export function reset() {
