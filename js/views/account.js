@@ -69,6 +69,10 @@ function signUpForm() {
   return `
     <form class="auth-form" data-form="sign-up" novalidate>
       ${messages()}
+      <div class="field">
+        <label class="field__label" for="acct-name">Your name <span class="field__optional">(optional)</span></label>
+        <input class="input" id="acct-name" name="name" type="text" autocomplete="given-name" maxlength="40" data-focus-key="acct-name">
+      </div>
       ${field('acct-email', 'Email', 'email', 'email', 'maxlength="254" inputmode="email"')}
       ${passwordField('acct-password', 'Choose a password', 'new-password')}
       <p class="muted small">By creating an account you agree to the <a href="#/terms">Terms of Service</a> and the <a href="#/privacy">Privacy Policy</a>.
@@ -187,9 +191,10 @@ export function onSubmit(e) {
   if (kind === 'sign-in' && !password) { fail('Please enter your password.'); return; }
   sentTo = email || sentTo;
 
-  if (kind === 'sign-in') run(button, async () => { await cloud.signIn(email, password); location.hash = '#/my-day'; });
+  if (kind === 'sign-in') run(button, async () => { await cloud.signIn(email, password); location.hash = cloud.takeReturn(); });
   if (kind === 'sign-up') run(button, async () => {
-    const { needsConfirmation } = await cloud.signUp(email, password);
+    const name = (form.elements.name?.value ?? '').trim().slice(0, 40);
+    const { needsConfirmation } = await cloud.signUp(email, password, name);
     location.hash = needsConfirmation ? '#/account/check-email' : '#/my-day';
   });
   if (kind === 'forgot') run(button, async () => { await cloud.requestPasswordReset(email); location.hash = '#/account/check-email'; });

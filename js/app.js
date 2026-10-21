@@ -53,7 +53,7 @@ function currentView() {
 // ---- Rendering ------------------------------------------------------------------
 
 function renderNav() {
-  navEl.innerHTML = ROUTES.filter((r) => !r.hidden).map((r) => `
+  navEl.innerHTML = ROUTES.filter((r) => !r.hidden || (r.id === 'admin' && showAdminLink)).map((r) => `
     <li>
       <a class="nav__link" href="#/${r.id}" ${r.id === currentRoute ? 'aria-current="page"' : ''}>
         ${icon(r.icon, 'nav__icon')}
@@ -253,10 +253,34 @@ function chooseLocalData(counts) {
   });
 }
 
+// "Active users" for the owner's statistics: one ping when the app opens, then at most
+// every 15 minutes while it is in use. The server keeps only the date.
+let lastTouch = 0;
+function touchActivity() {
+  if (cloud.getAuth().status !== 'signed-in' || Date.now() - lastTouch < 15 * 60_000) return;
+  lastTouch = Date.now();
+  cloud.rpc('touch_activity').catch(() => { lastTouch = 0; });
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') touchActivity(); });
+setInterval(() => { if (document.visibilityState === 'visible') touchActivity(); }, 5 * 60_000);
+
+// The Admin menu item is only a shortcut for the owner; the server checks every admin request.
+let showAdminLink = false;
+async function updateAdminLink() {
+  let admin = false;
+  if (cloud.getAuth().status === 'signed-in') {
+    try { admin = (await cloud.rpc('is_admin')) === true; } catch { admin = false; }
+  }
+  if (admin !== showAdminLink) { showAdminLink = admin; renderNav(); }
+}
+
 let attachedUser = null;
 async function onAuth(auth) {
   if (auth.status === 'signed-in' && attachedUser !== auth.user.id) {
     attachedUser = auth.user.id;
+    lastTouch = 0;
+    touchActivity();
+    updateAdminLink();
     ai.setAccessTokenProvider(() => cloud.accessToken());
     try {
       await sync.attach(auth.user, { chooseLocalData, downloadBackup });
@@ -264,6 +288,7 @@ async function onAuth(auth) {
     push.refresh();
   } else if (auth.status === 'signed-out' && attachedUser) {
     attachedUser = null;
+    updateAdminLink();
     ai.setAccessTokenProvider(null);
   }
   renderSidebarFooter();

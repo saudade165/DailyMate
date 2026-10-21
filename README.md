@@ -36,7 +36,7 @@ Then open http://localhost:5174 (the address allowed by the server for developme
   a task; Overdue / Today / Tomorrow / Later this week / Later / Done; snooze.
   Each reminder stores the time zone it was set in and is shown on this device's
   clock (daylight-saving changes handled).
-- **Accounts** (`#/account`) — sign up with email + password, email confirmation,
+- **Accounts** (`#/account`) — sign up with email + password (+ optional name), email confirmation,
   sign in/out, forgot/reset password, delete account (`#/delete-account`).
   Without an account everything still works on this device only.
 - **Cloud sync** — when signed in, tasks, lists, reminders and the display name sync
@@ -51,8 +51,14 @@ Then open http://localhost:5174 (the address allowed by the server for developme
   worker with an offline copy of the app. Updates are fetched first when online.
 - **Privacy pages** — Privacy Policy, Terms, Storage & cookies, account deletion
   (drafts — see below). Linked from the footer and Profile.
-- **Admin** (`#/admin`, admins only, checked on the server) — accounts with counts,
-  push device and delivery status, server log, cron/migration status, audit log.
+- **Admin** (`#/admin`, owner account only, checked on the server for every request) —
+  key numbers (users, new today / 7 / 30 days, active users), registrations chart with
+  date range, latest users, health; Users with search, filters, sorting, pages,
+  details, block/unblock, delete with confirmation, masked CSV export; feature usage;
+  new-registration e-mails (settings, status, test, retry); services, cron jobs,
+  server log and audit log. See `supabase/README.md`.
+- **New-registration e-mails** to the owner via a server function and Resend (needs
+  the `RESEND_API_KEY` secret — see `supabase/README.md`).
 - **AI Assistant** — finished screen, still **locked**: no AI provider or payments
   are connected, so no one is on DailyMate Plus. The server-side quota is in place.
   Nothing typed there is sent anywhere. See `supabase/README.md`.

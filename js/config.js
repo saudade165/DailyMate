@@ -24,5 +24,5 @@ export const LEGAL = {
   contactEmail: '',    // privacy and support contact
   address: '',         // mailing address
   privacyOfficer: '',  // person responsible for privacy (PIPEDA / Quebec Law 25)
-  lastUpdated: '2026-10-20',
+  lastUpdated: '2026-10-21',
 };

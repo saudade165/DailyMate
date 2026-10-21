@@ -128,9 +128,11 @@ export function explain(error) {
   return 'Something went wrong. Please try again.';
 }
 
-export async function signUp(email, password) {
+export async function signUp(email, password, name = '') {
   const client = await getClient();
-  const { data, error } = await client.auth.signUp({ email, password, options: { emailRedirectTo: appUrl() } });
+  const { data, error } = await client.auth.signUp({
+    email, password, options: { emailRedirectTo: appUrl(), data: name ? { display_name: name } : {} },
+  });
   if (error) throw error;
   // With email confirmation on there is no session yet. (For an email that already has an
   // account Supabase answers the same way, so nobody can find out who has an account.)
@@ -174,6 +176,19 @@ export async function accessToken() {
   const client = await getClient();
   const { data } = await client.auth.getSession();
   return data.session?.access_token ?? null;
+}
+
+// Where to go after signing in (e.g. back to #/admin). Kept for this tab only.
+const RETURN_KEY = 'dailymate.returnTo';
+export function rememberReturn(hash) {
+  try { sessionStorage.setItem(RETURN_KEY, hash); } catch { /* ignore */ }
+}
+export function takeReturn(fallback = '#/my-day') {
+  try {
+    const v = sessionStorage.getItem(RETURN_KEY);
+    sessionStorage.removeItem(RETURN_KEY);
+    return v && /^#\/[a-z0-9/-]*$/i.test(v) ? v : fallback;
+  } catch { return fallback; }
 }
 
 /** Calls a database function as the signed-in person. Throws on error. */

@@ -46,10 +46,12 @@ function privacy() {
 
     <h2>What we collect when you create an account</h2>
     <ul>
-      <li><strong>Account details:</strong> your email address and a password. The password is stored only as a secure hash by our authentication provider; we can’t read it.</li>
+      <li><strong>Account details:</strong> your email address, the name you give (optional) and a password. The password is stored only as a secure hash by our authentication provider; we can’t read it.</li>
       <li><strong>Your content:</strong> tasks, lists, reminders, your display name and time zones of reminders — so they can be kept in sync between your devices.</li>
       <li><strong>Notification details</strong> (only if you turn on notifications): an address and keys your browser creates for receiving push messages, and a label such as “Chrome on Android”.
         We keep a delivery record (time and result) for each notification.</li>
+      <li><strong>Activity dates:</strong> the dates on which you opened DailyMate while signed in (only the date — no times, pages or devices),
+        used only in combined statistics such as “active users this week”. Kept for about 13 months.</li>
       <li><strong>Technical records:</strong> sign-in times, and server logs that our providers keep for security and troubleshooting (they include IP addresses and browser type).</li>
     </ul>
     <p>We don’t use advertising, analytics or tracking tools, and we don’t sell or rent personal information.</p>
@@ -59,12 +61,14 @@ function privacy() {
       <li>To provide the service: sign-in, saving and syncing your content, and sending the reminders you set.</li>
       <li>To keep DailyMate secure and working, and to answer your questions.</li>
       <li>To send account emails you need (confirming your address, resetting your password). We don’t send marketing emails.</li>
+      <li>To let the operator know about new registrations: when an account is created, an email with its address, name (if given) and sign-up time is sent to the operator’s own mailbox.</li>
     </ul>
     <p>We rely on your consent, which you give by creating an account and by turning on notifications, and you can withdraw it at any time by turning notifications off or deleting your account.</p>
 
     <h2>Where it is stored and who processes it</h2>
     <ul>
       <li><strong>Supabase</strong> (database, sign-in, server functions) — our data is hosted in Canada (AWS ca-central-1, Montréal). Supabase is based in the United States and may access data from outside Canada to operate the service.</li>
+      <li><strong>Resend</strong> (Resend, Inc., United States) sends the operator’s new-registration emails.</li>
       <li><strong>GitHub Pages</strong> (GitHub, Inc., United States) delivers the app’s files to your browser and keeps standard access logs.</li>
       <li><strong>Push services</strong> run by your browser’s maker — Google (Chrome, Edge on Android), Mozilla (Firefox), Microsoft (Edge on Windows) or Apple (Safari) — carry notifications to your device.
         The text of each notification is encrypted so that only your device can read it.</li>
@@ -82,7 +86,8 @@ function privacy() {
     <h2>How we protect it</h2>
     <p>Connections are encrypted (HTTPS). Every account can only read and change its own data — this is enforced by the database itself (row-level security), not just by the app.
       Secret keys are kept on the server only. Administrators can see account facts (such as email address, sign-up date and how many tasks you have) to run the service,
-      but the admin tools don’t show the contents of your tasks, lists or reminders, and admin actions are logged.</p>
+      but the admin tools don’t show the contents of your tasks, lists or reminders, and admin actions are logged.
+      An account that breaks the Terms can be blocked (sign-in and data access stop; the data is kept) or deleted.</p>
 
     <h2>Your choices and rights</h2>
     <ul>
